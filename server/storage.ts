@@ -21,6 +21,7 @@ export interface IStorage {
   getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, updates: Partial<InsertUser>): Promise<User | undefined>;
+  deleteUser(id: string): Promise<boolean>;
   getAllUsers(): Promise<User[]>;
   
   createCase(caseData: InsertCase): Promise<Case>;
@@ -28,6 +29,7 @@ export interface IStorage {
   getAllCases(): Promise<Case[]>;
   getCasesByUserId(userId: string): Promise<Case[]>;
   updateCase(id: string, updates: Partial<InsertCase>): Promise<Case | undefined>;
+  deleteCase(id: string): Promise<boolean>;
   
   assignUserToCase(assignment: InsertCaseAssignment): Promise<CaseAssignment>;
   getCaseAssignments(caseId: string): Promise<CaseAssignment[]>;
@@ -37,6 +39,7 @@ export interface IStorage {
   getDocumentById(id: string): Promise<Document | undefined>;
   getDocumentsByCase(caseId: string): Promise<Document[]>;
   getAllDocuments(): Promise<Document[]>;
+  deleteDocument(id: string): Promise<boolean>;
 }
 
 export class DbStorage implements IStorage {
@@ -163,6 +166,46 @@ export class DbStorage implements IStorage {
 
   async getAllDocuments(): Promise<Document[]> {
     return await db.select().from(documents).orderBy(desc(documents.createdAt));
+  }
+
+  async deleteUser(id: string): Promise<boolean> {
+    const userCases = await db.select().from(cases).where(eq(cases.createdById, id));
+    if (userCases.length > 0) {
+      throw new Error("Cannot delete user with existing cases. Please reassign or delete cases first.");
+    }
+    
+    const userAssignments = await db.select().from(caseAssignments).where(eq(caseAssignments.userId, id));
+    if (userAssignments.length > 0) {
+      throw new Error("Cannot delete user with case assignments. Please remove case assignments first.");
+    }
+    
+    const userDocuments = await db.select().from(documents).where(eq(documents.uploadedById, id));
+    if (userDocuments.length > 0) {
+      throw new Error("Cannot delete user who has uploaded documents. Please reassign or delete documents first.");
+    }
+    
+    const result = await db.delete(users).where(eq(users.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  async deleteCase(id: string): Promise<boolean> {
+    const caseDocuments = await db.select().from(documents).where(eq(documents.caseId, id));
+    if (caseDocuments.length > 0) {
+      throw new Error("Cannot delete case with existing documents. Please delete documents first.");
+    }
+    
+    const caseAssignmentsList = await db.select().from(caseAssignments).where(eq(caseAssignments.caseId, id));
+    if (caseAssignmentsList.length > 0) {
+      throw new Error("Cannot delete case with existing assignments. Please remove assignments first.");
+    }
+    
+    const result = await db.delete(cases).where(eq(cases.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  async deleteDocument(id: string): Promise<boolean> {
+    const result = await db.delete(documents).where(eq(documents.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
   }
 }
 

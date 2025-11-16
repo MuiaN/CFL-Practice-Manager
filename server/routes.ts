@@ -103,6 +103,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.delete("/api/users/:id", authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const deleted = await storage.deleteUser(id);
+      
+      if (!deleted) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      res.status(204).send();
+    } catch (error: any) {
+      if (error.message?.includes("Cannot delete user")) {
+        return res.status(409).json({ message: error.message });
+      }
+      console.error("Delete user error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.get("/api/cases", authenticateToken, async (req: AuthRequest, res) => {
     try {
       const user = await storage.getUser(req.userId!);
@@ -147,6 +166,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Case not found" });
       }
 
+      if (req.userRole !== "admin" && caseItem.createdById !== req.userId) {
+        const assignedUsers = await storage.getUsersForCase(id);
+        const isAssigned = assignedUsers.some(user => user.id === req.userId);
+        
+        if (!isAssigned) {
+          return res.status(403).json({ message: "Access denied. You must be assigned to this case." });
+        }
+      }
+
       res.json(caseItem);
     } catch (error) {
       console.error("Get case error:", error);
@@ -159,14 +187,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = req.params;
       const updates = req.body;
       
-      const updatedCase = await storage.updateCase(id, updates);
-      if (!updatedCase) {
+      const existingCase = await storage.getCaseById(id);
+      if (!existingCase) {
         return res.status(404).json({ message: "Case not found" });
       }
 
+      if (req.userRole !== "admin" && existingCase.createdById !== req.userId) {
+        return res.status(403).json({ message: "You can only update cases you created" });
+      }
+
+      const updatedCase = await storage.updateCase(id, updates);
       res.json(updatedCase);
     } catch (error) {
       console.error("Update case error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/cases/:id", authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const deleted = await storage.deleteCase(id);
+      
+      if (!deleted) {
+        return res.status(404).json({ message: "Case not found" });
+      }
+
+      res.status(204).send();
+    } catch (error: any) {
+      if (error.message?.includes("Cannot delete case")) {
+        return res.status(409).json({ message: error.message });
+      }
+      console.error("Delete case error:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   });
@@ -180,6 +232,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "User ID required" });
       }
 
+      const caseItem = await storage.getCaseById(id);
+      if (!caseItem) {
+        return res.status(404).json({ message: "Case not found" });
+      }
+
+      if (req.userRole !== "admin" && caseItem.createdById !== req.userId) {
+        return res.status(403).json({ message: "Only admins or case owners can assign users" });
+      }
+
       const assignment = await storage.assignUserToCase({ caseId: id, userId });
       res.status(201).json(assignment);
     } catch (error) {
@@ -191,6 +252,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/cases/:id/users", authenticateToken, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
+      
+      const caseItem = await storage.getCaseById(id);
+      if (!caseItem) {
+        return res.status(404).json({ message: "Case not found" });
+      }
+
+      if (req.userRole !== "admin" && caseItem.createdById !== req.userId) {
+        const assignedUsers = await storage.getUsersForCase(id);
+        const isAssigned = assignedUsers.some(user => user.id === req.userId);
+        
+        if (!isAssigned) {
+          return res.status(403).json({ message: "Access denied. You must be assigned to this case." });
+        }
+      }
+      
       const assignedUsers = await storage.getUsersForCase(id);
       const usersWithoutPasswords = assignedUsers.map(({ password, ...user }) => user);
       res.json(usersWithoutPasswords);
@@ -200,7 +276,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/documents", authenticateToken, async (req: AuthRequest, res) => {
+  app.get("/api/documents", authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const allDocuments = await storage.getAllDocuments();
       res.json(allDocuments);
@@ -248,6 +324,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Document not found" });
       }
 
+      const caseItem = await storage.getCaseById(document.caseId);
+      if (!caseItem) {
+        return res.status(404).json({ message: "Associated case not found" });
+      }
+
+      if (req.userRole !== "admin" && caseItem.createdById !== req.userId) {
+        const assignedUsers = await storage.getUsersForCase(document.caseId);
+        const isAssigned = assignedUsers.some(user => user.id === req.userId);
+        
+        if (!isAssigned) {
+          return res.status(403).json({ message: "Access denied. You must be assigned to this case." });
+        }
+      }
+
       res.json(document);
     } catch (error) {
       console.error("Get document error:", error);
@@ -258,10 +348,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/cases/:id/documents", authenticateToken, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
+      
+      const caseItem = await storage.getCaseById(id);
+      if (!caseItem) {
+        return res.status(404).json({ message: "Case not found" });
+      }
+
+      if (req.userRole !== "admin" && caseItem.createdById !== req.userId) {
+        const assignedUsers = await storage.getUsersForCase(id);
+        const isAssigned = assignedUsers.some(user => user.id === req.userId);
+        
+        if (!isAssigned) {
+          return res.status(403).json({ message: "Access denied. You must be assigned to this case." });
+        }
+      }
+      
       const caseDocuments = await storage.getDocumentsByCase(id);
       res.json(caseDocuments);
     } catch (error) {
       console.error("Get case documents error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/documents/:id", authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const deleted = await storage.deleteDocument(id);
+      
+      if (!deleted) {
+        return res.status(404).json({ message: "Document not found" });
+      }
+
+      res.status(204).send();
+    } catch (error) {
+      console.error("Delete document error:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   });
