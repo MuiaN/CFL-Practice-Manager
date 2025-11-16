@@ -91,9 +91,10 @@ export default function AppSidebar({ user }: AppSidebarProps) {
 
   const getRoleDisplay = (role: string) => {
     const roleMap: Record<string, string> = {
-      Admin: "Administrator",
-      "Senior Associate": "Senior Associate",
-      Associate: "Legal Associate",
+      admin: "Administrator",
+      lawyer: "Lawyer",
+      paralegal: "Paralegal",
+      client: "Client",
     };
     return roleMap[role] || role;
   };
@@ -129,7 +130,7 @@ export default function AppSidebar({ user }: AppSidebarProps) {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {user.role === "Admin" && (
+        {user.role?.toLowerCase() === "admin" && (
           <SidebarGroup>
             <SidebarGroupLabel>Administration</SidebarGroupLabel>
             <SidebarGroupContent>
@@ -161,7 +162,7 @@ export default function AppSidebar({ user }: AppSidebarProps) {
               <div className="flex-1 text-left text-sm">
                 <p className="font-medium">{user.name}</p>
                 <p className="text-xs text-muted-foreground">
-                  {getRoleDisplay(user.role)}
+                  {getRoleDisplay(user.role || "")}
                 </p>
               </div>
             </button>

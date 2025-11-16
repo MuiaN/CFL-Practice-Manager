@@ -70,8 +70,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/users", authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const allUsers = await storage.getAllUsers();
-      const usersWithoutPasswords = allUsers.map(({ password, ...user }) => user);
-      res.json(usersWithoutPasswords);
+      const usersWithPracticeAreas = await Promise.all(
+        allUsers.map(async (user) => {
+          const practiceAreas = await storage.getUserPracticeAreas(user.id);
+          const role = user.roleId ? await storage.getRole(user.roleId) : null;
+          const { password, ...userWithoutPassword } = user;
+          return {
+            ...userWithoutPassword,
+            role: role?.name || null,
+            practiceAreaIds: practiceAreas.map(pa => pa.id),
+            practiceAreas: practiceAreas.map(pa => pa.name),
+          };
+        })
+      );
+      res.json(usersWithPracticeAreas);
     } catch (error) {
       console.error("Get users error:", error);
       res.status(500).json({ message: "Internal server error" });
@@ -80,10 +92,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/users", authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const userData = insertUserSchema.parse(req.body);
-      const user = await storage.createUser(userData);
+      const { practiceAreaIds, ...userData } = req.body;
+      const validatedUserData = insertUserSchema.parse(userData);
+      
+      // Validate practice area IDs if provided
+      if (practiceAreaIds !== undefined) {
+        const practiceAreaIdsSchema = z.array(z.string().uuid()).optional();
+        const validatedPracticeAreaIds = practiceAreaIdsSchema.parse(practiceAreaIds);
+        
+        // Verify practice areas exist
+        if (validatedPracticeAreaIds && validatedPracticeAreaIds.length > 0) {
+          const allPracticeAreas = await storage.getAllPracticeAreas();
+          const validIds = new Set(allPracticeAreas.map(pa => pa.id));
+          const invalidIds = validatedPracticeAreaIds.filter(id => !validIds.has(id));
+          
+          if (invalidIds.length > 0) {
+            return res.status(400).json({ 
+              message: "Invalid practice area IDs",
+              invalidIds 
+            });
+          }
+        }
+      }
+      
+      const user = await storage.createUser(validatedUserData);
+      
+      // Assign practice areas if provided and valid
+      if (practiceAreaIds && Array.isArray(practiceAreaIds)) {
+        for (const paId of practiceAreaIds) {
+          await storage.assignPracticeAreaToUser(user.id, paId);
+        }
+      }
+      
+      // Get practice areas to return in response
+      const userPracticeAreas = await storage.getUserPracticeAreas(user.id);
       const { password: _, ...userWithoutPassword } = user;
-      res.status(201).json(userWithoutPassword);
+      res.status(201).json({
+        ...userWithoutPassword,
+        practiceAreaIds: userPracticeAreas.map(pa => pa.id),
+        practiceAreas: userPracticeAreas.map(pa => pa.name),
+      });
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: "Invalid user data", errors: error.errors });
@@ -96,16 +144,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/users/:id", authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
-      const updates = req.body;
+      const { practiceAreaIds, ...updates } = req.body;
+      
+      // Validate practice area IDs if provided
+      if (practiceAreaIds !== undefined) {
+        const practiceAreaIdsSchema = z.array(z.string().uuid());
+        const validatedPracticeAreaIds = practiceAreaIdsSchema.parse(practiceAreaIds);
+        
+        // Verify practice areas exist
+        if (validatedPracticeAreaIds.length > 0) {
+          const allPracticeAreas = await storage.getAllPracticeAreas();
+          const validIds = new Set(allPracticeAreas.map(pa => pa.id));
+          const invalidIds = validatedPracticeAreaIds.filter(id => !validIds.has(id));
+          
+          if (invalidIds.length > 0) {
+            return res.status(400).json({ 
+              message: "Invalid practice area IDs",
+              invalidIds 
+            });
+          }
+        }
+      }
       
       const user = await storage.updateUser(id, updates);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
 
+      // Update practice areas if provided and valid
+      if (practiceAreaIds !== undefined && Array.isArray(practiceAreaIds)) {
+        // Get current practice areas
+        const currentPracticeAreas = await storage.getUserPracticeAreas(id);
+        const currentIds = currentPracticeAreas.map(pa => pa.id);
+        
+        // Remove practice areas that are no longer selected
+        for (const paId of currentIds) {
+          if (!practiceAreaIds.includes(paId)) {
+            await storage.removePracticeAreaFromUser(id, paId);
+          }
+        }
+        
+        // Add new practice areas
+        for (const paId of practiceAreaIds) {
+          if (!currentIds.includes(paId)) {
+            await storage.assignPracticeAreaToUser(id, paId);
+          }
+        }
+      }
+
+      // Get practice areas to return in response
+      const userPracticeAreas = await storage.getUserPracticeAreas(id);
       const { password: _, ...userWithoutPassword } = user;
-      res.json(userWithoutPassword);
+      res.json({
+        ...userWithoutPassword,
+        practiceAreaIds: userPracticeAreas.map(pa => pa.id),
+        practiceAreas: userPracticeAreas.map(pa => pa.name),
+      });
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid practice area data", errors: error.errors });
+      }
       console.error("Update user error:", error);
       res.status(500).json({ message: "Internal server error" });
     }

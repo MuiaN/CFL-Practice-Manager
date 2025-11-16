@@ -4,6 +4,16 @@
 
 CFL Legal is a professional legal practice management system designed for a law firm in Kilimani, Nairobi. The application manages cases, documents, team collaboration, and user administration with role-based access control. Built with a modern TypeScript stack, it provides a data-dense interface optimized for legal professionals to efficiently track case information, manage documentation, and coordinate team assignments.
 
+## Recent Changes (November 16, 2025)
+
+### Practice Areas in User Management
+- **Feature**: Added practice area assignment to user management system
+- **Frontend**: Multi-select checkboxes in create/edit user dialogs, practice areas displayed as badges in user table
+- **Backend**: Full CRUD operations with validation (UUID array + existence check)
+- **Data Integrity**: Validates practice area IDs exist in database before assignment
+- **User Experience**: Supports creating users with practice areas, editing assignments, and removing all practice areas
+- **Known Performance Note**: GET /api/users has N+1 query pattern (fetches roles and practice areas per user). Can be optimized later by bulk-loading in storage layer.
+
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
@@ -53,7 +63,9 @@ Preferred communication style: Simple, everyday language.
 - `/api/auth/*` - Authentication endpoints (login, user verification)
 - `/api/cases/*` - Case management endpoints
 - `/api/documents/*` - Document management endpoints  
-- `/api/users/*` - User administration endpoints
+- `/api/users/*` - User administration endpoints (supports practice area assignments)
+- `/api/practice-areas/*` - Practice area management endpoints
+- `/api/roles/*` - Role management endpoints
 
 **Authentication**: 
 - JWT (JSON Web Tokens) for stateless authentication
@@ -85,10 +97,25 @@ Preferred communication style: Simple, everyday language.
 **Users Table**:
 - UUID primary keys (generated via `gen_random_uuid()`)
 - Email-based authentication with unique constraint
-- Role-based permissions (enum: admin, senior_associate, associate)
-- Practice area specializations (array of enums)
+- Role-based permissions (foreign key to roles table)
+- Practice area associations via junction table (many-to-many)
 - Soft deletion via isActive flag
 - Timestamps for audit trail
+
+**Roles Table**:
+- UUID primary keys
+- Role name (admin, lawyer, paralegal, client)
+- Auto-seeded in development mode
+
+**Practice Areas Table**:
+- UUID primary keys  
+- Practice area name and enum code
+- Auto-seeded with 5 default areas (Corporate & Commercial, IP, Real Estate, Banking & Finance, Dispute Resolution)
+
+**User Practice Areas Table**:
+- Junction table linking users to practice areas (many-to-many)
+- Composite unique constraint on (userId, practiceAreaId)
+- Cascade deletion when user or practice area is deleted
 
 **Cases Table**:
 - Unique case numbers for legal tracking

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table,
   TableBody,
@@ -31,6 +32,7 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
+  FormDescription,
 } from "@/components/ui/form";
 import {
   Select,
@@ -58,10 +60,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { User, Role } from "@shared/schema";
+import type { User, Role, PracticeArea } from "@shared/schema";
 
 interface UserWithRole extends Omit<User, 'password'> {
   role?: string | null;
+  practiceAreaIds?: string[];
+  practiceAreas?: string[];
 }
 
 // Schema for creating a new user (password required)
@@ -71,6 +75,7 @@ const createUserSchema = z.object({
   password: z.string().min(6, "Password must be at least 6 characters"),
   roleId: z.string().min(1, "Role is required"),
   isActive: z.boolean(),
+  practiceAreaIds: z.array(z.string()).optional(),
 });
 
 // Schema for updating a user (all fields optional, password not included)
@@ -79,6 +84,7 @@ const updateUserSchema = z.object({
   email: z.string().email("Invalid email address").optional(),
   roleId: z.string().optional(),
   isActive: z.boolean().optional(),
+  practiceAreaIds: z.array(z.string()).optional(),
 });
 
 type CreateUserFormValues = z.infer<typeof createUserSchema>;
@@ -99,6 +105,10 @@ export default function AdminUsersPage() {
     queryKey: ["/api/roles"],
   });
 
+  const { data: practiceAreas, isLoading: practiceAreasLoading } = useQuery<PracticeArea[]>({
+    queryKey: ["/api/practice-areas"],
+  });
+
   const createForm = useForm<CreateUserFormValues>({
     resolver: zodResolver(createUserSchema),
     defaultValues: {
@@ -107,6 +117,7 @@ export default function AdminUsersPage() {
       password: "",
       roleId: "",
       isActive: true,
+      practiceAreaIds: [],
     },
   });
 
@@ -117,6 +128,7 @@ export default function AdminUsersPage() {
       email: "",
       roleId: "",
       isActive: true,
+      practiceAreaIds: [],
     },
   });
 
@@ -127,6 +139,7 @@ export default function AdminUsersPage() {
         email: editingUser.email,
         roleId: editingUser.roleId || "",
         isActive: editingUser.isActive,
+        practiceAreaIds: editingUser.practiceAreaIds || [],
       });
     }
   }, [editingUser, editForm]);
@@ -156,9 +169,12 @@ export default function AdminUsersPage() {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: UpdateUserFormValues }) => {
-      // Only send fields that are actually set
+      // Only send fields that are actually set, but preserve arrays (including empty ones)
       const payload = Object.fromEntries(
-        Object.entries(data).filter(([_, v]) => v !== undefined && v !== "")
+        Object.entries(data).filter(([key, v]) => {
+          if (key === 'practiceAreaIds') return v !== undefined; // Keep arrays even if empty
+          return v !== undefined && v !== "";
+        })
       );
       return await apiRequest("PATCH", `/api/users/${id}`, payload);
     },
@@ -223,7 +239,7 @@ export default function AdminUsersPage() {
     return role?.name || "Unknown Role";
   };
 
-  if (usersLoading || rolesLoading) {
+  if (usersLoading || rolesLoading || practiceAreasLoading) {
     return (
       <div className="flex items-center justify-center h-96">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -329,6 +345,44 @@ export default function AdminUsersPage() {
                     </FormItem>
                   )}
                 />
+                <FormField
+                  control={createForm.control}
+                  name="practiceAreaIds"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Practice Areas</FormLabel>
+                      <FormDescription>
+                        Select the areas of law this user will work in
+                      </FormDescription>
+                      <div className="space-y-2 mt-2">
+                        {practiceAreas?.map((pa) => (
+                          <div key={pa.id} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`create-pa-${pa.id}`}
+                              checked={field.value?.includes(pa.id)}
+                              onCheckedChange={(checked) => {
+                                const currentValue = field.value || [];
+                                if (checked) {
+                                  field.onChange([...currentValue, pa.id]);
+                                } else {
+                                  field.onChange(currentValue.filter((id) => id !== pa.id));
+                                }
+                              }}
+                              data-testid={`checkbox-practice-area-${pa.id}`}
+                            />
+                            <label
+                              htmlFor={`create-pa-${pa.id}`}
+                              className="text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                            >
+                              {pa.name}
+                            </label>
+                          </div>
+                        ))}
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                 <DialogFooter>
                   <Button
                     type="button"
@@ -375,6 +429,7 @@ export default function AdminUsersPage() {
               <TableHead>User</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Role</TableHead>
+              <TableHead>Practice Areas</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="w-12"></TableHead>
             </TableRow>
@@ -382,7 +437,7 @@ export default function AdminUsersPage() {
           <TableBody>
             {filteredUsers.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                   No users found
                 </TableCell>
               </TableRow>
@@ -409,6 +464,19 @@ export default function AdminUsersPage() {
                   </TableCell>
                   <TableCell>
                     <Badge variant="secondary">{getRoleName(user.roleId)}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    {user.practiceAreas && user.practiceAreas.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {user.practiceAreas.map((pa, index) => (
+                          <Badge key={index} variant="outline" className="text-xs">
+                            {pa}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground text-sm">None</span>
+                    )}
                   </TableCell>
                   <TableCell>
                     <Badge
@@ -534,6 +602,44 @@ export default function AdminUsersPage() {
                         <SelectItem value="false">Inactive</SelectItem>
                       </SelectContent>
                     </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={editForm.control}
+                name="practiceAreaIds"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Practice Areas</FormLabel>
+                    <FormDescription>
+                      Select the areas of law this user will work in
+                    </FormDescription>
+                    <div className="space-y-2 mt-2">
+                      {practiceAreas?.map((pa) => (
+                        <div key={pa.id} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`edit-pa-${pa.id}`}
+                            checked={field.value?.includes(pa.id)}
+                            onCheckedChange={(checked) => {
+                              const currentValue = field.value || [];
+                              if (checked) {
+                                field.onChange([...currentValue, pa.id]);
+                              } else {
+                                field.onChange(currentValue.filter((id) => id !== pa.id));
+                              }
+                            }}
+                            data-testid={`checkbox-edit-practice-area-${pa.id}`}
+                          />
+                          <label
+                            htmlFor={`edit-pa-${pa.id}`}
+                            className="text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                          >
+                            {pa.name}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}
