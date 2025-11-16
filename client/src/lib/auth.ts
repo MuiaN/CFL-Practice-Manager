@@ -4,8 +4,8 @@ export interface AuthUser {
   id: string;
   email: string;
   name: string;
-  role: "admin" | "senior_associate" | "associate";
-  practiceAreas: string[] | null;
+  role: string | null;
+  practiceAreas: string[];
   isActive: string;
 }
 

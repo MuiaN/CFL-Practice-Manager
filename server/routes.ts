@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { generateToken, verifyPassword, authenticateToken, requireAdmin, type AuthRequest } from "./auth";
-import { insertUserSchema, insertCaseSchema, insertDocumentSchema, insertCaseAssignmentSchema } from "@shared/schema";
+import { insertUserSchema, insertCaseSchema, insertDocumentSchema, insertCaseAssignmentSchema, insertRoleSchema, insertPracticeAreaSchema } from "@shared/schema";
 import multer from "multer";
 import path from "path";
 import { z } from "zod";
@@ -31,12 +31,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Invalid credentials" });
       }
 
-      const token = generateToken(user.id, user.role);
+      const role = user.roleId ? await storage.getRole(user.roleId) : null;
+      const token = generateToken(user.id, role?.name || "");
       const { password: _, ...userWithoutPassword } = user;
 
       res.json({
         token,
-        user: userWithoutPassword,
+        user: { ...userWithoutPassword, role: role?.name || null },
       });
     } catch (error) {
       console.error("Login error:", error);
@@ -51,8 +52,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "User not found" });
       }
 
+      const role = user.roleId ? await storage.getRole(user.roleId) : null;
+      const practiceAreas = await storage.getUserPracticeAreas(user.id);
+
       const { password: _, ...userWithoutPassword } = user;
-      res.json(userWithoutPassword);
+      res.json({
+        ...userWithoutPassword,
+        role: role?.name || null,
+        practiceAreas: practiceAreas.map(pa => pa.name),
+      });
     } catch (error) {
       console.error("Get current user error:", error);
       res.status(500).json({ message: "Internal server error" });
@@ -124,9 +132,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/cases", authenticateToken, async (req: AuthRequest, res) => {
     try {
-      const user = await storage.getUser(req.userId!);
-      
-      if (user?.role === "admin") {
+      if (req.userRole === "Admin") {
         const allCases = await storage.getAllCases();
         res.json(allCases);
       } else {
@@ -383,6 +389,176 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(204).send();
     } catch (error) {
       console.error("Delete document error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/roles", authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const allRoles = await storage.getAllRoles();
+      res.json(allRoles);
+    } catch (error) {
+      console.error("Get roles error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/roles", authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const roleData = insertRoleSchema.parse(req.body);
+      const role = await storage.createRole(roleData);
+      res.status(201).json(role);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid role data", errors: error.errors });
+      }
+      console.error("Create role error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.patch("/api/roles/:id", authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const updates = insertRoleSchema.partial().parse(req.body);
+      
+      const role = await storage.updateRole(id, updates);
+      if (!role) {
+        return res.status(404).json({ message: "Role not found" });
+      }
+
+      res.json(role);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid role data", errors: error.errors });
+      }
+      console.error("Update role error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/roles/:id", authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const deleted = await storage.deleteRole(id);
+      
+      if (!deleted) {
+        return res.status(404).json({ message: "Role not found" });
+      }
+
+      res.status(204).send();
+    } catch (error: any) {
+      if (error.message?.includes("Cannot delete role")) {
+        return res.status(409).json({ message: error.message });
+      }
+      console.error("Delete role error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/practice-areas", authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      const allPracticeAreas = await storage.getAllPracticeAreas();
+      res.json(allPracticeAreas);
+    } catch (error) {
+      console.error("Get practice areas error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/practice-areas", authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const practiceAreaData = insertPracticeAreaSchema.parse(req.body);
+      const practiceArea = await storage.createPracticeArea(practiceAreaData);
+      res.status(201).json(practiceArea);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid practice area data", errors: error.errors });
+      }
+      console.error("Create practice area error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.patch("/api/practice-areas/:id", authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const updates = insertPracticeAreaSchema.partial().parse(req.body);
+      
+      const practiceArea = await storage.updatePracticeArea(id, updates);
+      if (!practiceArea) {
+        return res.status(404).json({ message: "Practice area not found" });
+      }
+
+      res.json(practiceArea);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid practice area data", errors: error.errors });
+      }
+      console.error("Update practice area error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/practice-areas/:id", authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const deleted = await storage.deletePracticeArea(id);
+      
+      if (!deleted) {
+        return res.status(404).json({ message: "Practice area not found" });
+      }
+
+      res.status(204).send();
+    } catch (error: any) {
+      if (error.message?.includes("Cannot delete practice area")) {
+        return res.status(409).json({ message: error.message });
+      }
+      console.error("Delete practice area error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/users/:id/practice-areas", authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const practiceAreas = await storage.getUserPracticeAreas(id);
+      res.json(practiceAreas);
+    } catch (error) {
+      console.error("Get user practice areas error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/users/:id/practice-areas", authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const { practiceAreaId } = req.body;
+      
+      if (!practiceAreaId) {
+        return res.status(400).json({ message: "Practice area ID required" });
+      }
+
+      const assignment = await storage.assignPracticeAreaToUser(id, practiceAreaId);
+      res.status(201).json(assignment);
+    } catch (error) {
+      console.error("Assign practice area error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/users/:id/practice-areas/:practiceAreaId", authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id, practiceAreaId } = req.params;
+      const deleted = await storage.removePracticeAreaFromUser(id, practiceAreaId);
+      
+      if (!deleted) {
+        return res.status(404).json({ message: "Practice area assignment not found" });
+      }
+
+      res.status(204).send();
+    } catch (error) {
+      console.error("Remove practice area error:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   });

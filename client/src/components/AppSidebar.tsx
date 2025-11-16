@@ -18,6 +18,8 @@ import {
   Settings,
   Scale,
   LogOut,
+  Shield,
+  Folder,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -63,6 +65,16 @@ export default function AppSidebar({ user }: AppSidebarProps) {
       icon: Users,
     },
     {
+      title: "Roles",
+      url: "/admin/roles",
+      icon: Shield,
+    },
+    {
+      title: "Practice Areas",
+      url: "/admin/practice-areas",
+      icon: Folder,
+    },
+    {
       title: "Settings",
       url: "/admin/settings",
       icon: Settings,
@@ -79,9 +91,9 @@ export default function AppSidebar({ user }: AppSidebarProps) {
 
   const getRoleDisplay = (role: string) => {
     const roleMap: Record<string, string> = {
-      admin: "Administrator",
-      senior_associate: "Senior Associate",
-      associate: "Legal Associate",
+      Admin: "Administrator",
+      "Senior Associate": "Senior Associate",
+      Associate: "Legal Associate",
     };
     return roleMap[role] || role;
   };
@@ -117,7 +129,7 @@ export default function AppSidebar({ user }: AppSidebarProps) {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {user.role === "admin" && (
+        {user.role === "Admin" && (
           <SidebarGroup>
             <SidebarGroupLabel>Administration</SidebarGroupLabel>
             <SidebarGroupContent>

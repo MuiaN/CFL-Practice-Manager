@@ -7,10 +7,19 @@ import {
   type InsertDocument,
   type CaseAssignment,
   type InsertCaseAssignment,
+  type Role,
+  type InsertRole,
+  type PracticeArea,
+  type InsertPracticeArea,
+  type UserPracticeArea,
+  type InsertUserPracticeArea,
   users,
   cases,
   documents,
   caseAssignments,
+  roles,
+  practiceAreas,
+  userPracticeAreas,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, ilike, or } from "drizzle-orm";
@@ -23,6 +32,22 @@ export interface IStorage {
   updateUser(id: string, updates: Partial<InsertUser>): Promise<User | undefined>;
   deleteUser(id: string): Promise<boolean>;
   getAllUsers(): Promise<User[]>;
+  
+  createRole(role: InsertRole): Promise<Role>;
+  getRole(id: string): Promise<Role | undefined>;
+  getAllRoles(): Promise<Role[]>;
+  updateRole(id: string, updates: Partial<InsertRole>): Promise<Role | undefined>;
+  deleteRole(id: string): Promise<boolean>;
+  
+  createPracticeArea(practiceArea: InsertPracticeArea): Promise<PracticeArea>;
+  getPracticeArea(id: string): Promise<PracticeArea | undefined>;
+  getAllPracticeAreas(): Promise<PracticeArea[]>;
+  updatePracticeArea(id: string, updates: Partial<InsertPracticeArea>): Promise<PracticeArea | undefined>;
+  deletePracticeArea(id: string): Promise<boolean>;
+  
+  assignPracticeAreaToUser(userId: string, practiceAreaId: string): Promise<UserPracticeArea>;
+  removePracticeAreaFromUser(userId: string, practiceAreaId: string): Promise<boolean>;
+  getUserPracticeAreas(userId: string): Promise<PracticeArea[]>;
   
   createCase(caseData: InsertCase): Promise<Case>;
   getCaseById(id: string): Promise<Case | undefined>;
@@ -206,6 +231,108 @@ export class DbStorage implements IStorage {
   async deleteDocument(id: string): Promise<boolean> {
     const result = await db.delete(documents).where(eq(documents.id, id));
     return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  async createRole(roleData: InsertRole): Promise<Role> {
+    const [role] = await db.insert(roles).values(roleData).returning();
+    return role;
+  }
+
+  async getRole(id: string): Promise<Role | undefined> {
+    const [role] = await db.select().from(roles).where(eq(roles.id, id));
+    return role;
+  }
+
+  async getAllRoles(): Promise<Role[]> {
+    return await db.select().from(roles).orderBy(roles.name);
+  }
+
+  async updateRole(id: string, updates: Partial<InsertRole>): Promise<Role | undefined> {
+    const [role] = await db
+      .update(roles)
+      .set(updates)
+      .where(eq(roles.id, id))
+      .returning();
+    return role;
+  }
+
+  async deleteRole(id: string): Promise<boolean> {
+    const usersWithRole = await db.select().from(users).where(eq(users.roleId, id));
+    if (usersWithRole.length > 0) {
+      throw new Error("Cannot delete role that is assigned to users. Please reassign users first.");
+    }
+    const result = await db.delete(roles).where(eq(roles.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  async createPracticeArea(practiceAreaData: InsertPracticeArea): Promise<PracticeArea> {
+    const [practiceArea] = await db.insert(practiceAreas).values(practiceAreaData).returning();
+    return practiceArea;
+  }
+
+  async getPracticeArea(id: string): Promise<PracticeArea | undefined> {
+    const [practiceArea] = await db.select().from(practiceAreas).where(eq(practiceAreas.id, id));
+    return practiceArea;
+  }
+
+  async getAllPracticeAreas(): Promise<PracticeArea[]> {
+    return await db.select().from(practiceAreas).orderBy(practiceAreas.name);
+  }
+
+  async updatePracticeArea(id: string, updates: Partial<InsertPracticeArea>): Promise<PracticeArea | undefined> {
+    const [practiceArea] = await db
+      .update(practiceAreas)
+      .set(updates)
+      .where(eq(practiceAreas.id, id))
+      .returning();
+    return practiceArea;
+  }
+
+  async deletePracticeArea(id: string): Promise<boolean> {
+    const casesWithPA = await db.select().from(cases).where(eq(cases.practiceAreaId, id));
+    if (casesWithPA.length > 0) {
+      throw new Error("Cannot delete practice area that is assigned to cases. Please reassign cases first.");
+    }
+    const userPAs = await db.select().from(userPracticeAreas).where(eq(userPracticeAreas.practiceAreaId, id));
+    if (userPAs.length > 0) {
+      throw new Error("Cannot delete practice area that is assigned to users. Please remove user assignments first.");
+    }
+    const result = await db.delete(practiceAreas).where(eq(practiceAreas.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  async assignPracticeAreaToUser(userId: string, practiceAreaId: string): Promise<UserPracticeArea> {
+    const [assignment] = await db
+      .insert(userPracticeAreas)
+      .values({ userId, practiceAreaId })
+      .returning();
+    return assignment;
+  }
+
+  async removePracticeAreaFromUser(userId: string, practiceAreaId: string): Promise<boolean> {
+    const result = await db
+      .delete(userPracticeAreas)
+      .where(
+        and(
+          eq(userPracticeAreas.userId, userId),
+          eq(userPracticeAreas.practiceAreaId, practiceAreaId)
+        )
+      );
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  async getUserPracticeAreas(userId: string): Promise<PracticeArea[]> {
+    const assignments = await db
+      .select({ practiceAreaId: userPracticeAreas.practiceAreaId })
+      .from(userPracticeAreas)
+      .where(eq(userPracticeAreas.userId, userId));
+    
+    const paIds = assignments.map((a) => a.practiceAreaId);
+    if (paIds.length === 0) return [];
+    
+    return await db.select().from(practiceAreas).where(
+      or(...paIds.map((id) => eq(practiceAreas.id, id)))
+    );
   }
 }
 

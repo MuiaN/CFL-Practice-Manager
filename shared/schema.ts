@@ -3,25 +3,36 @@ import { pgTable, text, varchar, timestamp, pgEnum } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const userRoleEnum = pgEnum("user_role", ["admin", "senior_associate", "associate"]);
 export const caseStatusEnum = pgEnum("case_status", ["active", "pending", "closed", "under_review"]);
-export const practiceAreaEnum = pgEnum("practice_area", [
-  "corporate_commercial",
-  "intellectual_property",
-  "real_estate",
-  "banking_finance",
-  "dispute_resolution",
-  "tmt"
-]);
+
+export const roles = pgTable("roles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(),
+  description: text("description"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const practiceAreas = pgTable("practice_areas", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(),
+  description: text("description"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
 
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   email: text("email").notNull().unique(),
   password: text("password").notNull(),
   name: text("name").notNull(),
-  role: userRoleEnum("role").notNull().default("associate"),
-  practiceAreas: practiceAreaEnum("practice_areas").array(),
+  roleId: varchar("role_id").references(() => roles.id),
   isActive: text("is_active").notNull().default("true"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const userPracticeAreas = pgTable("user_practice_areas", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  practiceAreaId: varchar("practice_area_id").notNull().references(() => practiceAreas.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -30,7 +41,7 @@ export const cases = pgTable("cases", {
   caseNumber: text("case_number").notNull().unique(),
   title: text("title").notNull(),
   description: text("description"),
-  practiceArea: practiceAreaEnum("practice_area").notNull(),
+  practiceAreaId: varchar("practice_area_id").notNull().references(() => practiceAreas.id),
   status: caseStatusEnum("status").notNull().default("pending"),
   createdById: varchar("created_by_id").notNull().references(() => users.id),
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -56,7 +67,22 @@ export const documents = pgTable("documents", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+export const insertRoleSchema = createInsertSchema(roles).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertPracticeAreaSchema = createInsertSchema(practiceAreas).omit({
+  id: true,
+  createdAt: true,
+});
+
 export const insertUserSchema = createInsertSchema(users).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertUserPracticeAreaSchema = createInsertSchema(userPracticeAreas).omit({
   id: true,
   createdAt: true,
 });
@@ -77,8 +103,17 @@ export const insertCaseAssignmentSchema = createInsertSchema(caseAssignments).om
   assignedAt: true,
 });
 
+export type InsertRole = z.infer<typeof insertRoleSchema>;
+export type Role = typeof roles.$inferSelect;
+
+export type InsertPracticeArea = z.infer<typeof insertPracticeAreaSchema>;
+export type PracticeArea = typeof practiceAreas.$inferSelect;
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
+
+export type InsertUserPracticeArea = z.infer<typeof insertUserPracticeAreaSchema>;
+export type UserPracticeArea = typeof userPracticeAreas.$inferSelect;
 
 export type InsertCase = z.infer<typeof insertCaseSchema>;
 export type Case = typeof cases.$inferSelect;
