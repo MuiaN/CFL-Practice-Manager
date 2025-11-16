@@ -79,7 +79,7 @@ async function seed() {
         password: "admin123",
         name: "System Administrator",
         roleId: adminRole.id,
-        isActive: "true",
+        isActive: true,
       });
       console.log("  ✓ Admin user created");
       console.log("    Email: admin@cfllegal.co.ke");
