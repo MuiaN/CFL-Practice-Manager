@@ -9,73 +9,41 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent } from "@/components/ui/card";
 import CaseCard from "./CaseCard";
-import { Plus, Search, Filter, LayoutGrid, List } from "lucide-react";
+import { CreateCaseDialog } from "./CreateCaseDialog";
+import { Plus, Search, Filter, LayoutGrid, List, Briefcase } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import type { Case } from "@shared/schema";
+import { useLocation } from "wouter";
 
 export default function CasesPage() {
+  const [, setLocation] = useLocation();
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
 
-  const mockCases = [
-    {
-      caseNumber: "CFL-2024-0042",
-      title: "Merger and Acquisition Agreement for Tech Startup",
-      practiceArea: "Corporate & Commercial" as const,
-      status: "Active" as const,
-      assignedTo: [
-        { name: "Sarah Kimani", initials: "SK" },
-        { name: "Peter Ochieng", initials: "PO" },
-      ],
-      lastUpdated: "2 hours ago",
-    },
-    {
-      caseNumber: "CFL-2024-0038",
-      title: "Trademark Registration for Fashion Brand",
-      practiceArea: "Intellectual Property" as const,
-      status: "Under Review" as const,
-      assignedTo: [{ name: "Mary Wanjiru", initials: "MW" }],
-      lastUpdated: "1 day ago",
-    },
-    {
-      caseNumber: "CFL-2024-0035",
-      title: "Commercial Property Lease Agreement - Westlands",
-      practiceArea: "Real Estate" as const,
-      status: "Active" as const,
-      assignedTo: [
-        { name: "John Mwangi", initials: "JM" },
-        { name: "Alice Njeri", initials: "AN" },
-      ],
-      lastUpdated: "3 days ago",
-    },
-    {
-      caseNumber: "CFL-2024-0029",
-      title: "Loan Agreement Dispute Resolution",
-      practiceArea: "Banking & Finance" as const,
-      status: "Pending" as const,
-      assignedTo: [{ name: "Robert Kariuki", initials: "RK" }],
-      lastUpdated: "5 days ago",
-    },
-    {
-      caseNumber: "CFL-2024-0025",
-      title: "Debt Recovery Litigation",
-      practiceArea: "Dispute Resolution" as const,
-      status: "Active" as const,
-      assignedTo: [
-        { name: "Grace Muthoni", initials: "GM" },
-        { name: "James Kipchoge", initials: "JK" },
-      ],
-      lastUpdated: "1 week ago",
-    },
-    {
-      caseNumber: "CFL-2024-0018",
-      title: "Data Privacy Compliance Review",
-      practiceArea: "TMT" as const,
-      status: "Closed" as const,
-      assignedTo: [{ name: "Patricia Akinyi", initials: "PA" }],
-      lastUpdated: "2 weeks ago",
-    },
-  ];
+  const { data: cases = [], isLoading } = useQuery<Case[]>({
+    queryKey: ["/api/cases"],
+  });
+
+  const { data: user } = useQuery<{ id: string }>({
+    queryKey: ["/api/auth/me"],
+  });
+
+  const filteredCases = cases.filter(caseItem => {
+    const matchesSearch = 
+      caseItem.caseNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      caseItem.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (caseItem.clientName && caseItem.clientName.toLowerCase().includes(searchQuery.toLowerCase()));
+    
+    const matchesStatus = statusFilter === "all" || caseItem.status === statusFilter;
+    
+    return matchesSearch && matchesStatus;
+  });
+
+  const myCases = filteredCases.filter(c => c.createdById === user?.id);
 
   return (
     <div className="space-y-6">
@@ -86,7 +54,7 @@ export default function CasesPage() {
             Manage and track all legal cases
           </p>
         </div>
-        <Button data-testid="button-new-case">
+        <Button onClick={() => setIsCreateDialogOpen(true)} data-testid="button-new-case">
           <Plus className="h-4 w-4 mr-2" />
           New Case
         </Button>
@@ -112,13 +80,9 @@ export default function CasesPage() {
             <SelectItem value="active">Active</SelectItem>
             <SelectItem value="pending">Pending</SelectItem>
             <SelectItem value="review">Under Review</SelectItem>
-            <SelectItem value="closed">Closed</SelectItem>
+            <SelectItem value="completed">Completed</SelectItem>
           </SelectContent>
         </Select>
-        <Button variant="outline" data-testid="button-filter">
-          <Filter className="h-4 w-4 mr-2" />
-          More Filters
-        </Button>
         <div className="flex border rounded-md">
           <Button
             variant={viewMode === "grid" ? "secondary" : "ghost"}
@@ -143,32 +107,93 @@ export default function CasesPage() {
 
       <Tabs defaultValue="all" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="all" data-testid="tab-all">All Cases</TabsTrigger>
-          <TabsTrigger value="my" data-testid="tab-my">My Cases</TabsTrigger>
-          <TabsTrigger value="team" data-testid="tab-team">Team Cases</TabsTrigger>
+          <TabsTrigger value="all" data-testid="tab-all">All Cases ({filteredCases.length})</TabsTrigger>
+          <TabsTrigger value="my" data-testid="tab-my">My Cases ({myCases.length})</TabsTrigger>
         </TabsList>
         <TabsContent value="all" className="space-y-4">
-          <div className={viewMode === "grid" ? "grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" : "space-y-4"}>
-            {mockCases.map((caseItem, index) => (
-              <CaseCard
-                key={index}
-                {...caseItem}
-                onClick={() => console.log("Case clicked:", caseItem.caseNumber)}
-              />
-            ))}
-          </div>
+          {isLoading ? (
+            <div className={viewMode === "grid" ? "grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" : "space-y-4"}>
+              {[...Array(6)].map((_, i) => (
+                <Card key={i} className="h-48 animate-pulse bg-muted" />
+              ))}
+            </div>
+          ) : filteredCases.length > 0 ? (
+            <div className={viewMode === "grid" ? "grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" : "space-y-4"}>
+              {filteredCases.map((caseItem) => (
+                <CaseCard
+                  key={caseItem.id}
+                  caseNumber={caseItem.caseNumber}
+                  title={caseItem.title}
+                  practiceArea=""
+                  status={caseItem.status as any}
+                  assignedTo={[]}
+                  lastUpdated={new Date(caseItem.createdAt).toLocaleDateString()}
+                  onClick={() => setLocation(`/cases/${caseItem.id}`)}
+                />
+              ))}
+            </div>
+          ) : (
+            <Card>
+              <CardContent className="py-12">
+                <div className="text-center text-muted-foreground">
+                  <Briefcase className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p className="text-lg font-medium mb-1">No cases found</p>
+                  <p className="text-sm mb-4">
+                    {searchQuery || statusFilter !== "all"
+                      ? "Try adjusting your filters"
+                      : "Create your first case to get started"}
+                  </p>
+                  {!searchQuery && statusFilter === "all" && (
+                    <Button onClick={() => setIsCreateDialogOpen(true)}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create Case
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
-        <TabsContent value="my">
-          <div className="text-center py-12 text-muted-foreground">
-            My assigned cases would appear here
-          </div>
-        </TabsContent>
-        <TabsContent value="team">
-          <div className="text-center py-12 text-muted-foreground">
-            Team cases would appear here
-          </div>
+        <TabsContent value="my" className="space-y-4">
+          {isLoading ? (
+            <div className={viewMode === "grid" ? "grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" : "space-y-4"}>
+              {[...Array(6)].map((_, i) => (
+                <Card key={i} className="h-48 animate-pulse bg-muted" />
+              ))}
+            </div>
+          ) : myCases.length > 0 ? (
+            <div className={viewMode === "grid" ? "grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" : "space-y-4"}>
+              {myCases.map((caseItem) => (
+                <CaseCard
+                  key={caseItem.id}
+                  caseNumber={caseItem.caseNumber}
+                  title={caseItem.title}
+                  practiceArea=""
+                  status={caseItem.status as any}
+                  assignedTo={[]}
+                  lastUpdated={new Date(caseItem.createdAt).toLocaleDateString()}
+                  onClick={() => setLocation(`/cases/${caseItem.id}`)}
+                />
+              ))}
+            </div>
+          ) : (
+            <Card>
+              <CardContent className="py-12">
+                <div className="text-center text-muted-foreground">
+                  <Briefcase className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p className="text-lg font-medium mb-1">No cases assigned to you</p>
+                  <p className="text-sm">Cases you create will appear here</p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
       </Tabs>
+
+      <CreateCaseDialog 
+        open={isCreateDialogOpen}
+        onOpenChange={setIsCreateDialogOpen}
+      />
     </div>
   );
 }

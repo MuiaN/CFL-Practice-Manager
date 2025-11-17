@@ -230,7 +230,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/cases", authenticateToken, async (req: AuthRequest, res) => {
     try {
-      if (req.userRole === "Admin") {
+      if (req.userRole === "admin") {
         const allCases = await storage.getAllCases();
         res.json(allCases);
       } else {
@@ -250,7 +250,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         createdById: req.userId,
       });
       
-      const newCase = await storage.createCase(caseData);
+      // Generate case number automatically
+      const year = new Date().getFullYear();
+      const allCases = await storage.getAllCases();
+      const caseCount = allCases.length + 1;
+      const caseNumber = `CFL-${year}-${String(caseCount).padStart(4, '0')}`;
+      
+      const newCase = await storage.createCase({
+        ...caseData,
+        caseNumber,
+      });
       res.status(201).json(newCase);
     } catch (error) {
       if (error instanceof z.ZodError) {

@@ -3,7 +3,7 @@ import { pgTable, text, varchar, timestamp, pgEnum, boolean } from "drizzle-orm/
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const caseStatusEnum = pgEnum("case_status", ["active", "pending", "closed", "under_review"]);
+export const caseStatusEnum = pgEnum("case_status", ["active", "pending", "review", "completed"]);
 
 export const roles = pgTable("roles", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -41,6 +41,7 @@ export const cases = pgTable("cases", {
   caseNumber: text("case_number").notNull().unique(),
   title: text("title").notNull(),
   description: text("description"),
+  clientName: text("client_name").notNull(),
   practiceAreaId: varchar("practice_area_id").notNull().references(() => practiceAreas.id),
   status: caseStatusEnum("status").notNull().default("pending"),
   createdById: varchar("created_by_id").notNull().references(() => users.id),
@@ -89,6 +90,7 @@ export const insertUserPracticeAreaSchema = createInsertSchema(userPracticeAreas
 
 export const insertCaseSchema = createInsertSchema(cases).omit({
   id: true,
+  caseNumber: true,
   createdAt: true,
   updatedAt: true,
 });

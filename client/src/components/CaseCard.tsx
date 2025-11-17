@@ -13,14 +13,8 @@ import {
 interface CaseCardProps {
   caseNumber: string;
   title: string;
-  practiceArea:
-    | "Corporate & Commercial"
-    | "Intellectual Property"
-    | "Real Estate"
-    | "Banking & Finance"
-    | "Dispute Resolution"
-    | "TMT";
-  status: "Active" | "Pending" | "Closed" | "Under Review";
+  practiceArea: string;
+  status: "active" | "pending" | "review" | "completed" | "Active" | "Pending" | "Closed" | "Under Review";
   assignedTo: Array<{ name: string; initials: string; avatar?: string }>;
   lastUpdated: string;
   onClick?: () => void;
@@ -40,6 +34,10 @@ const statusColors: Record<string, string> = {
   Pending: "bg-status-away/10 text-status-away border-status-away/20",
   Closed: "bg-muted text-muted-foreground border-muted",
   "Under Review": "bg-status-busy/10 text-status-busy border-status-busy/20",
+  active: "bg-status-online/10 text-status-online border-status-online/20",
+  pending: "bg-status-away/10 text-status-away border-status-away/20",
+  review: "bg-status-busy/10 text-status-busy border-status-busy/20",
+  completed: "bg-muted text-muted-foreground border-muted",
 };
 
 export default function CaseCard({
@@ -51,6 +49,8 @@ export default function CaseCard({
   lastUpdated,
   onClick,
 }: CaseCardProps) {
+  const displayStatus = status.charAt(0).toUpperCase() + status.slice(1);
+  
   return (
     <Card className="hover-elevate cursor-pointer" onClick={onClick} data-testid={`card-case-${caseNumber}`}>
       <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0 pb-2">
@@ -80,19 +80,21 @@ export default function CaseCard({
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex flex-wrap gap-2">
+          {practiceArea && (
+            <Badge
+              variant="outline"
+              className={`border ${practiceAreaColors[practiceArea] || 'bg-muted text-muted-foreground'}`}
+              data-testid="badge-practice-area"
+            >
+              {practiceArea}
+            </Badge>
+          )}
           <Badge
             variant="outline"
-            className={`border ${practiceAreaColors[practiceArea]}`}
-            data-testid="badge-practice-area"
-          >
-            {practiceArea}
-          </Badge>
-          <Badge
-            variant="outline"
-            className={`border ${statusColors[status]}`}
+            className={`border ${statusColors[status.toLowerCase()]}`}
             data-testid="badge-status"
           >
-            {status}
+            {displayStatus}
           </Badge>
         </div>
         <div className="flex items-center gap-2">
