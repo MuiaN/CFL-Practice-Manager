@@ -362,6 +362,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.delete("/api/cases/:caseId/users/:userId", authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { caseId, userId } = req.params;
+
+      const caseItem = await storage.getCaseById(caseId);
+      if (!caseItem) {
+        return res.status(404).json({ message: "Case not found" });
+      }
+
+      await storage.removeUserFromCase(caseId, userId);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Remove user from case error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.get("/api/cases/:id/users", authenticateToken, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;

@@ -4,7 +4,44 @@
 
 CFL Legal is a professional legal practice management system designed for a law firm in Kilimani, Nairobi. The application manages cases, documents, team collaboration, and user administration with role-based access control. Built with a modern TypeScript stack, it provides a data-dense interface optimized for legal professionals to efficiently track case information, manage documentation, and coordinate team assignments.
 
-## Recent Changes (November 16, 2025)
+## Recent Changes (November 17, 2025)
+
+### Team Member Removal Feature
+- **Feature**: Admins can now remove team members from cases to revoke access
+- **Frontend**: 
+  - Remove button (X icon) displayed next to each team member (admin-only)
+  - Mutation with proper cache invalidation and toast notifications
+  - Disabled state during removal to prevent duplicate actions
+- **Backend**: 
+  - DELETE `/api/cases/:caseId/users/:userId` endpoint (admin-only)
+  - `removeUserFromCase` storage method for database deletion
+  - Proper validation and error handling
+- **Security**: Admin-only access enforced on both frontend and backend
+- **User Experience**: Removed users immediately lose access to the case
+- **Code Quality**: Architect reviewed and approved all implementation
+
+### Case Detail Page with Full Management Features
+- **Feature**: Comprehensive case detail view with team assignment and document management
+- **Frontend**: 
+  - CaseDetailPage component with tabbed interface (Overview, Team, Documents)
+  - Case information display with all metadata and status badges
+  - Team tab showing assigned users with avatar components
+  - Documents tab with upload and download functionality
+  - Edit case dialog using react-hook-form with Zod validation
+  - Assign user dialog for team management
+  - Role-based access control (admin-only edit, upload, assign features)
+  - Loading states, error handling, and toast notifications
+  - Proper data-testid attributes for testing
+- **Backend Integration**:
+  - Connected to existing API endpoints: `/api/cases/:id`, `/api/cases/:id/users`, `/api/cases/:id/documents`, `/api/cases/:id/assign`
+  - Document download with authenticated blob fetch
+  - Mutation cache invalidation for real-time updates
+- **User Experience**: 
+  - Click any case card to view detailed information
+  - Admins can edit case details, assign team members, and upload documents
+  - All users can view case information, team members, and download documents
+  - Empty states guide users to take appropriate actions
+- **Code Quality**: All code reviewed and approved by architect with TypeScript validation passing
 
 ### Practice Areas in User Management
 - **Feature**: Added practice area assignment to user management system
@@ -61,8 +98,16 @@ Preferred communication style: Simple, everyday language.
 
 **API Pattern**: RESTful API design with the following structure:
 - `/api/auth/*` - Authentication endpoints (login, user verification)
-- `/api/cases/*` - Case management endpoints
-- `/api/documents/*` - Document management endpoints  
+- `/api/cases/*` - Case management endpoints (includes case detail, team assignment, documents)
+  - GET `/api/cases/:id` - Get specific case details
+  - PATCH `/api/cases/:id` - Update case information (admin only)
+  - POST `/api/cases/:id/assign` - Assign user to case (admin only)
+  - DELETE `/api/cases/:caseId/users/:userId` - Remove user from case (admin only)
+  - GET `/api/cases/:id/users` - Get users assigned to case
+  - GET `/api/cases/:id/documents` - Get documents for case
+- `/api/documents/*` - Document management endpoints
+  - POST `/api/documents` - Upload document (admin only)
+  - GET `/api/documents/:id` - Download document (authenticated)
 - `/api/users/*` - User administration endpoints (supports practice area assignments)
 - `/api/practice-areas/*` - Practice area management endpoints
 - `/api/roles/*` - Role management endpoints

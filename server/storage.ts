@@ -57,6 +57,7 @@ export interface IStorage {
   deleteCase(id: string): Promise<boolean>;
   
   assignUserToCase(assignment: InsertCaseAssignment): Promise<CaseAssignment>;
+  removeUserFromCase(caseId: string, userId: string): Promise<boolean>;
   getCaseAssignments(caseId: string): Promise<CaseAssignment[]>;
   getUsersForCase(caseId: string): Promise<User[]>;
   
@@ -148,6 +149,18 @@ export class DbStorage implements IStorage {
       .values(assignment)
       .returning();
     return newAssignment;
+  }
+
+  async removeUserFromCase(caseId: string, userId: string): Promise<boolean> {
+    const result = await db
+      .delete(caseAssignments)
+      .where(
+        and(
+          eq(caseAssignments.caseId, caseId),
+          eq(caseAssignments.userId, userId)
+        )
+      );
+    return true;
   }
 
   async getCaseAssignments(caseId: string): Promise<CaseAssignment[]> {

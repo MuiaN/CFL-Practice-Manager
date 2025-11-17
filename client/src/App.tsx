@@ -10,6 +10,7 @@ import LoginPage from "@/components/LoginPage";
 import AppSidebar from "@/components/AppSidebar";
 import DashboardPage from "@/components/DashboardPage";
 import CasesPage from "@/components/CasesPage";
+import CaseDetailPage from "@/components/CaseDetailPage";
 import DocumentsPage from "@/components/DocumentsPage";
 import AdminUsersPage from "@/components/AdminUsersPage";
 import RolesPage from "@/components/RolesPage";
@@ -38,6 +39,7 @@ function AuthenticatedLayout({ user }: { user: AuthUser }) {
             <Switch>
               <Route path="/" component={DashboardPage} />
               <Route path="/dashboard" component={DashboardPage} />
+              <Route path="/cases/:id" component={CaseDetailPage} />
               <Route path="/cases" component={CasesPage} />
               <Route path="/documents" component={DocumentsPage} />
               <Route path="/admin/users" component={AdminUsersPage} />
