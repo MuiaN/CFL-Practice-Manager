@@ -43,9 +43,21 @@ interface CreateCaseDialogProps {
 export function CreateCaseDialog({ open, onOpenChange }: CreateCaseDialogProps) {
   const { toast } = useToast();
   
-  const { data: practiceAreas = [] } = useQuery<PracticeArea[]>({
+  const { data: allPracticeAreas = [] } = useQuery<PracticeArea[]>({
     queryKey: ["/api/practice-areas"],
   });
+
+  const { data: currentUser } = useQuery<{ role: string; practiceAreas: string[]; practiceAreaIds?: string[] }>({
+    queryKey: ["/api/auth/me"],
+  });
+
+  // Filter practice areas based on user assignments
+  // If admin, show all practice areas; otherwise, show only assigned ones
+  const practiceAreas = currentUser?.role === "admin" 
+    ? allPracticeAreas 
+    : allPracticeAreas.filter(pa => 
+        currentUser?.practiceAreas?.includes(pa.name)
+      );
 
   const { register, handleSubmit, formState: { errors }, setValue, watch, reset } = useForm<CaseFormData>({
     resolver: zodResolver(caseFormSchema),

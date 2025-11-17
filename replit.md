@@ -6,6 +6,28 @@ CFL Legal is a professional legal practice management system designed for a law 
 
 ## Recent Changes (November 17, 2025)
 
+### Setup Documentation
+- **Feature**: Comprehensive setup guide created for local and VPS deployment
+- **Documentation**: 
+  - `SETUP.md` - Complete deployment guide for local machines and Ubuntu VPS servers
+  - `.env.example` - Template file with all required environment variables
+  - Covers PostgreSQL database setup, environment configuration, and security best practices
+  - Includes troubleshooting section for common issues
+- **Target Audience**: System administrators and developers deploying the application
+
+### Profile Settings with Secure Updates
+- **Feature**: Users can now update their own profile information and change passwords
+- **Security**:
+  - PATCH `/api/auth/me` endpoint allows authenticated users to update their own data
+  - Password changes require current password verification
+  - Email uniqueness validation prevents duplicate accounts
+  - Zod validation for all input fields
+  - Passwords properly hashed using bcrypt in storage layer
+- **Frontend**: ProfileSettings component with separate forms for profile info and password changes
+- **User Experience**: All users can manage their own account without admin intervention
+
+## Recent Changes (Earlier - November 17, 2025)
+
 ### Team Member Removal Feature
 - **Feature**: Admins can now remove team members from cases to revoke access
 - **Frontend**: 

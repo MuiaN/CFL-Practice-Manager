@@ -67,6 +67,89 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.patch("/api/auth/me", authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.userId!;
+      const { name, email, password, currentPassword } = req.body;
+      
+      // Validation schema for profile updates
+      const updateProfileSchema = z.object({
+        name: z.string().min(1, "Name is required").optional(),
+        email: z.string().email("Invalid email address").optional(),
+        password: z.string().min(6, "Password must be at least 6 characters").optional(),
+        currentPassword: z.string().optional(),
+      });
+      
+      // Validate the request body
+      const validationResult = updateProfileSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          message: "Invalid input", 
+          errors: validationResult.error.errors 
+        });
+      }
+      
+      const validatedData = validationResult.data;
+      
+      // If changing password, verify current password first
+      if (validatedData.password) {
+        if (!currentPassword) {
+          return res.status(400).json({ 
+            message: "Current password is required to change password" 
+          });
+        }
+        
+        const user = await storage.getUser(userId);
+        if (!user) {
+          return res.status(404).json({ message: "User not found" });
+        }
+        
+        const isValidPassword = await verifyPassword(currentPassword, user.password);
+        if (!isValidPassword) {
+          return res.status(401).json({ message: "Current password is incorrect" });
+        }
+      }
+      
+      // Build updates object
+      const updates: Partial<{ name: string; email: string; password: string }> = {};
+      
+      if (validatedData.name !== undefined) {
+        updates.name = validatedData.name;
+      }
+      
+      if (validatedData.email !== undefined) {
+        // Check if email is already taken by another user
+        const existingUser = await storage.getUserByEmail(validatedData.email);
+        if (existingUser && existingUser.id !== userId) {
+          return res.status(400).json({ message: "Email is already in use" });
+        }
+        updates.email = validatedData.email;
+      }
+      
+      if (validatedData.password !== undefined) {
+        updates.password = validatedData.password;
+      }
+      
+      const updatedUser = await storage.updateUser(userId, updates);
+      if (!updatedUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      const role = updatedUser.roleId ? await storage.getRole(updatedUser.roleId) : null;
+      const practiceAreas = await storage.getUserPracticeAreas(updatedUser.id);
+      
+      const { password: _, ...userWithoutPassword } = updatedUser;
+      res.json({
+        ...userWithoutPassword,
+        role: role?.name || null,
+        practiceAreas: practiceAreas.map(pa => pa.name),
+      });
+    } catch (error) {
+      console.error("Update current user error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.get("/api/users", authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const allUsers = await storage.getAllUsers();

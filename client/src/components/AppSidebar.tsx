@@ -20,6 +20,7 @@ import {
   LogOut,
   Shield,
   Folder,
+  User,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -103,9 +104,9 @@ export default function AppSidebar({ user }: AppSidebarProps) {
     <Sidebar>
       <SidebarHeader className="p-4">
         <div className="flex items-center gap-2">
-          <Scale className="h-6 w-6 text-primary" />
+          <img src="/favicon.png" alt="CFL Legal" className="h-6 w-6" />
           <div>
-            <h2 className="font-semibold text-base">CFL Legal</h2>
+            <h2 className="font-semibold text-base leading-tight pb-0.5">CFL Legal</h2>
             <p className="text-xs text-muted-foreground">Kilimani, Nairobi</p>
           </div>
         </div>
@@ -170,8 +171,11 @@ export default function AppSidebar({ user }: AppSidebarProps) {
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel>My Account</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem data-testid="menu-profile">
-              Profile Settings
+            <DropdownMenuItem asChild data-testid="menu-profile">
+              <Link href="/profile">
+                <User className="h-4 w-4 mr-2" />
+                Profile Settings
+              </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={logout} data-testid="menu-logout">

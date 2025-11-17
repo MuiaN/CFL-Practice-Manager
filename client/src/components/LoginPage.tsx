@@ -3,7 +3,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Scale } from "lucide-react";
 import heroImage from "@assets/generated_images/Professional_law_office_Nairobi_6eaeab6d.png";
 import { login } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
@@ -60,10 +59,10 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
           <div className="space-y-8">
             <div className="flex items-center gap-4">
               <div className="p-3 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl shadow-2xl shadow-blue-500/20">
-                <Scale className="h-10 w-10" />
+                <img src="/favicon.png" alt="CFL Legal" className="h-10 w-10" />
               </div>
               <div>
-                <h1 className="text-5xl font-bold bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent">
+                <h1 className="text-5xl font-bold bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent leading-tight pb-1">
                   CFL Legal
                 </h1>
                 <p className="text-sm text-blue-200/80 mt-1">Kilimani, Nairobi</p>
@@ -95,10 +94,10 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
         <div className="w-full max-w-md relative z-10">
           <div className="flex lg:hidden items-center gap-3 mb-12">
             <div className="p-2 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg">
-              <Scale className="h-6 w-6 text-white" />
+              <img src="/favicon.png" alt="CFL Legal" className="h-6 w-6" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-white">CFL Legal</h1>
+              <h1 className="text-2xl font-bold text-white leading-tight pb-0.5">CFL Legal</h1>
               <p className="text-sm text-blue-200/60">Kilimani, Nairobi</p>
             </div>
           </div>
@@ -142,7 +141,7 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
                 />
               </div>
 
-              <div className="flex items-center justify-between">
+              <div className="flex items-center">
                 <div className="flex items-center space-x-2">
                   <Checkbox
                     id="remember"
@@ -159,15 +158,6 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
                     Remember me
                   </Label>
                 </div>
-                <Button
-                  variant="ghost"
-                  className="px-0 text-sm h-auto text-blue-400 hover:text-blue-300"
-                  type="button"
-                  disabled={isLoading}
-                  data-testid="link-forgot-password"
-                >
-                  Forgot password?
-                </Button>
               </div>
 
               <Button
@@ -180,18 +170,8 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
               </Button>
             </form>
 
-            <div className="mt-8 space-y-3 text-center">
-              <div className="h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
-              <p className="text-sm text-blue-200/60">Demo credentials</p>
-              <div className="bg-white/5 border border-white/10 rounded-lg p-3">
-                <p className="font-mono text-xs text-blue-100">
-                  admin@cfllegal.co.ke
-                </p>
-                <p className="font-mono text-xs text-blue-100 mt-1">
-                  admin123
-                </p>
-              </div>
-              <p className="text-xs text-white/40 pt-2">
+            <div className="mt-6 text-center">
+              <p className="text-xs text-white/40">
                 Authorized personnel only
               </p>
             </div>
