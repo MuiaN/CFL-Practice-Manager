@@ -1,22 +1,114 @@
+import { useState, useEffect } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
-import { Shield, Building2, Mail, Globe, Save } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Building2, Save, Loader2 } from "lucide-react";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { useToast } from "@/hooks/use-toast";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import type { Settings } from "@shared/schema";
+
+const settingsFormSchema = z.object({
+  firmName: z.string().min(2, "Firm name must be at least 2 characters"),
+  firmLocation: z.string().min(2, "Location must be at least 2 characters"),
+  firmAddress: z.string().optional(),
+  firmPhone: z.string().optional(),
+  firmEmail: z.string().email("Invalid email address").optional().or(z.literal("")),
+});
+
+type SettingsFormValues = z.infer<typeof settingsFormSchema>;
 
 export default function SettingsPage() {
+  const { toast } = useToast();
+
+  const { data: settings, isLoading } = useQuery<Settings>({
+    queryKey: ["/api/settings"],
+  });
+
+  const form = useForm<SettingsFormValues>({
+    resolver: zodResolver(settingsFormSchema),
+    defaultValues: {
+      firmName: "",
+      firmLocation: "",
+      firmAddress: "",
+      firmPhone: "",
+      firmEmail: "",
+    },
+  });
+
+  useEffect(() => {
+    if (settings) {
+      form.reset({
+        firmName: settings.firmName || "",
+        firmLocation: settings.firmLocation || "",
+        firmAddress: settings.firmAddress || "",
+        firmPhone: settings.firmPhone || "",
+        firmEmail: settings.firmEmail || "",
+      });
+    }
+  }, [settings, form]);
+
+  const updateMutation = useMutation({
+    mutationFn: async (data: SettingsFormValues) => {
+      // Filter out empty optional fields to send undefined instead of empty strings
+      const payload = {
+        ...data,
+        firmAddress: data.firmAddress || undefined,
+        firmPhone: data.firmPhone || undefined,
+        firmEmail: data.firmEmail || undefined,
+      };
+      return await apiRequest("PATCH", "/api/settings", payload);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
+      toast({
+        title: "Success",
+        description: "Settings updated successfully",
+      });
+    },
+    onError: (error: any) => {
+      const message = error.message || "Failed to update settings";
+      toast({
+        title: "Error",
+        description: message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const onSubmit = (data: SettingsFormValues) => {
+    updateMutation.mutate(data);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
         <p className="text-muted-foreground mt-1">
-          Manage system configuration and preferences
+          Manage your firm's information and system configuration
         </p>
       </div>
 
       <div className="grid gap-6">
-        {/* Firm Information */}
         <Card data-testid="card-firm-info">
           <CardHeader>
             <div className="flex items-center gap-2">
@@ -27,191 +119,105 @@ export default function SettingsPage() {
               Update your law firm's basic information
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="firm-name" data-testid="label-firm-name">Firm Name</Label>
-                <Input
-                  id="firm-name"
-                  defaultValue="CFL Legal"
-                  data-testid="input-firm-name"
+          <CardContent>
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <FormField
+                    control={form.control}
+                    name="firmName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Firm Name</FormLabel>
+                        <FormControl>
+                          <Input {...field} data-testid="input-firm-name" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="firmLocation"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Location</FormLabel>
+                        <FormControl>
+                          <Input {...field} data-testid="input-firm-location" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <FormField
+                  control={form.control}
+                  name="firmAddress"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Address</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          placeholder="Enter full address"
+                          data-testid="input-firm-address"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="firm-location" data-testid="label-firm-location">Location</Label>
-                <Input
-                  id="firm-location"
-                  defaultValue="Kilimani, Nairobi"
-                  data-testid="input-firm-location"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="firm-address" data-testid="label-firm-address">Address</Label>
-              <Input
-                id="firm-address"
-                placeholder="Enter full address"
-                data-testid="input-firm-address"
-              />
-            </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="firm-phone" data-testid="label-firm-phone">Phone Number</Label>
-                <Input
-                  id="firm-phone"
-                  type="tel"
-                  placeholder="+254 XXX XXX XXX"
-                  data-testid="input-firm-phone"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="firm-email" data-testid="label-firm-email">Email</Label>
-                <Input
-                  id="firm-email"
-                  type="email"
-                  placeholder="info@cfllegal.co.ke"
-                  data-testid="input-firm-email"
-                />
-              </div>
-            </div>
-            <Button data-testid="button-save-firm-info">
-              <Save className="h-4 w-4 mr-2" />
-              Save Changes
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Email Configuration */}
-        <Card data-testid="card-email-config">
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Mail className="h-5 w-5 text-primary" />
-              <CardTitle>Email Configuration</CardTitle>
-            </div>
-            <CardDescription>
-              Configure email server settings for notifications
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="smtp-host" data-testid="label-smtp-host">SMTP Host</Label>
-                <Input
-                  id="smtp-host"
-                  placeholder="smtp.example.com"
-                  data-testid="input-smtp-host"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="smtp-port" data-testid="label-smtp-port">SMTP Port</Label>
-                <Input
-                  id="smtp-port"
-                  type="number"
-                  placeholder="587"
-                  data-testid="input-smtp-port"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="smtp-username" data-testid="label-smtp-username">Username</Label>
-              <Input
-                id="smtp-username"
-                placeholder="noreply@cfllegal.co.ke"
-                data-testid="input-smtp-username"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="smtp-password" data-testid="label-smtp-password">Password</Label>
-              <Input
-                id="smtp-password"
-                type="password"
-                placeholder="••••••••"
-                data-testid="input-smtp-password"
-              />
-            </div>
-            <Button data-testid="button-save-email-config">
-              <Save className="h-4 w-4 mr-2" />
-              Save Email Settings
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* System Settings */}
-        <Card data-testid="card-system-settings">
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Shield className="h-5 w-5 text-primary" />
-              <CardTitle>System Settings</CardTitle>
-            </div>
-            <CardDescription>
-              Configure system-wide preferences and security
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="session-timeout" data-testid="label-session-timeout">
-                Session Timeout (minutes)
-              </Label>
-              <Input
-                id="session-timeout"
-                type="number"
-                defaultValue="60"
-                data-testid="input-session-timeout"
-              />
-              <p className="text-sm text-muted-foreground">
-                Users will be logged out after this period of inactivity
-              </p>
-            </div>
-            <Separator />
-            <div className="space-y-2">
-              <Label htmlFor="max-upload-size" data-testid="label-max-upload-size">
-                Maximum Upload Size (MB)
-              </Label>
-              <Input
-                id="max-upload-size"
-                type="number"
-                defaultValue="10"
-                data-testid="input-max-upload-size"
-              />
-              <p className="text-sm text-muted-foreground">
-                Maximum file size allowed for document uploads
-              </p>
-            </div>
-            <Button data-testid="button-save-system-settings">
-              <Save className="h-4 w-4 mr-2" />
-              Save System Settings
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Integration Settings */}
-        <Card data-testid="card-integration-settings">
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Globe className="h-5 w-5 text-primary" />
-              <CardTitle>Integrations</CardTitle>
-            </div>
-            <CardDescription>
-              Manage third-party integrations and API keys
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="api-key" data-testid="label-api-key">API Key</Label>
-              <Input
-                id="api-key"
-                type="password"
-                placeholder="••••••••••••••••"
-                data-testid="input-api-key"
-              />
-              <p className="text-sm text-muted-foreground">
-                API key for external integrations
-              </p>
-            </div>
-            <Button data-testid="button-save-integration-settings">
-              <Save className="h-4 w-4 mr-2" />
-              Save Integration Settings
-            </Button>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <FormField
+                    control={form.control}
+                    name="firmPhone"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Phone Number</FormLabel>
+                        <FormControl>
+                          <Input
+                            {...field}
+                            type="tel"
+                            placeholder="+254 XXX XXX XXX"
+                            data-testid="input-firm-phone"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="firmEmail"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Email</FormLabel>
+                        <FormControl>
+                          <Input
+                            {...field}
+                            type="email"
+                            placeholder="info@cfllegal.co.ke"
+                            data-testid="input-firm-email"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  disabled={updateMutation.isPending}
+                  data-testid="button-save-firm-info"
+                >
+                  {updateMutation.isPending && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  <Save className="h-4 w-4 mr-2" />
+                  Save Changes
+                </Button>
+              </form>
+            </Form>
           </CardContent>
         </Card>
       </div>

@@ -15,6 +15,8 @@ import {
   type InsertUserPracticeArea,
   type Folder,
   type InsertFolder,
+  type Settings,
+  type InsertSettings,
   users,
   cases,
   documents,
@@ -23,6 +25,7 @@ import {
   practiceAreas,
   userPracticeAreas,
   folders,
+  settings,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, ilike, or } from "drizzle-orm";
@@ -79,6 +82,10 @@ export interface IStorage {
   getAllFolders(): Promise<Folder[]>;
   updateFolder(id: string, updates: Partial<InsertFolder>): Promise<Folder | undefined>;
   deleteFolder(id: string): Promise<boolean>;
+  
+  getSettings(): Promise<Settings | undefined>;
+  createSettings(settingsData: InsertSettings): Promise<Settings>;
+  updateSettings(updates: Partial<InsertSettings>): Promise<Settings | undefined>;
 }
 
 export class DbStorage implements IStorage {
@@ -448,6 +455,33 @@ export class DbStorage implements IStorage {
       .where(eq(documents.id, id))
       .returning();
     return document;
+  }
+  
+  async getSettings(): Promise<Settings | undefined> {
+    const allSettings = await db.select().from(settings);
+    return allSettings[0];
+  }
+  
+  async createSettings(settingsData: InsertSettings): Promise<Settings> {
+    const [newSettings] = await db
+      .insert(settings)
+      .values(settingsData)
+      .returning();
+    return newSettings;
+  }
+  
+  async updateSettings(updates: Partial<InsertSettings>): Promise<Settings | undefined> {
+    const existingSettings = await this.getSettings();
+    if (!existingSettings) {
+      return undefined;
+    }
+    
+    const [updated] = await db
+      .update(settings)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(settings.id, existingSettings.id))
+      .returning();
+    return updated;
   }
 }
 

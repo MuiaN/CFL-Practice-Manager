@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { generateToken, verifyPassword, authenticateToken, requireAdmin, type AuthRequest } from "./auth";
-import { insertUserSchema, insertCaseSchema, insertDocumentSchema, insertCaseAssignmentSchema, insertRoleSchema, insertPracticeAreaSchema, insertFolderSchema } from "@shared/schema";
+import { insertUserSchema, insertCaseSchema, insertDocumentSchema, insertCaseAssignmentSchema, insertRoleSchema, insertPracticeAreaSchema, insertFolderSchema, insertSettingsSchema } from "@shared/schema";
 import multer from "multer";
 import path from "path";
 import { z } from "zod";
@@ -915,6 +915,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(204).send();
     } catch (error) {
       console.error("Remove practice area error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Settings routes
+  app.get("/api/settings", authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      let settings = await storage.getSettings();
+      
+      // If settings don't exist, create default settings
+      if (!settings) {
+        const defaultSettings = {
+          firmName: "CFL Legal",
+          firmLocation: "Kilimani, Nairobi",
+          firmAddress: "",
+          firmPhone: "",
+          firmEmail: "",
+        };
+        settings = await storage.createSettings(defaultSettings);
+      }
+      
+      res.json(settings);
+    } catch (error) {
+      console.error("Get settings error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.patch("/api/settings", authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const updates = insertSettingsSchema.partial().parse(req.body);
+      
+      let settings = await storage.getSettings();
+      
+      // If settings don't exist yet, create them
+      if (!settings) {
+        const settingsData = insertSettingsSchema.parse(req.body);
+        settings = await storage.createSettings(settingsData);
+      } else {
+        settings = await storage.updateSettings(updates);
+        if (!settings) {
+          return res.status(404).json({ message: "Settings not found" });
+        }
+      }
+
+      res.json(settings);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid settings data", errors: error.errors });
+      }
+      console.error("Update settings error:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   });

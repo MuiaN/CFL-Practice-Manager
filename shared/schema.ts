@@ -80,6 +80,16 @@ export const documents = pgTable("documents", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+export const settings = pgTable("settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  firmName: text("firm_name").notNull(),
+  firmLocation: text("firm_location").notNull(),
+  firmAddress: text("firm_address"),
+  firmPhone: text("firm_phone"),
+  firmEmail: text("firm_email"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 export const insertRoleSchema = createInsertSchema(roles).omit({
   id: true,
   createdAt: true,
@@ -124,6 +134,11 @@ export const insertCaseAssignmentSchema = createInsertSchema(caseAssignments).om
   assignedAt: true,
 });
 
+export const insertSettingsSchema = createInsertSchema(settings).omit({
+  id: true,
+  updatedAt: true,
+});
+
 export type InsertRole = z.infer<typeof insertRoleSchema>;
 export type Role = typeof roles.$inferSelect;
 
@@ -147,3 +162,6 @@ export type Document = typeof documents.$inferSelect;
 
 export type InsertCaseAssignment = z.infer<typeof insertCaseAssignmentSchema>;
 export type CaseAssignment = typeof caseAssignments.$inferSelect;
+
+export type InsertSettings = z.infer<typeof insertSettingsSchema>;
+export type Settings = typeof settings.$inferSelect;

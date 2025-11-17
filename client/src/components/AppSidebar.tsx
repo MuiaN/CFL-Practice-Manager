@@ -173,9 +173,6 @@ export default function AppSidebar({ user }: AppSidebarProps) {
             <DropdownMenuItem data-testid="menu-profile">
               Profile Settings
             </DropdownMenuItem>
-            <DropdownMenuItem data-testid="menu-preferences">
-              Preferences
-            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={logout} data-testid="menu-logout">
               <LogOut className="h-4 w-4 mr-2" />

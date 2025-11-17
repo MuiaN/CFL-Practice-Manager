@@ -78,10 +78,11 @@ const createUserSchema = z.object({
   practiceAreaIds: z.array(z.string()).optional(),
 });
 
-// Schema for updating a user (all fields optional, password not included)
+// Schema for updating a user (all fields optional, including password)
 const updateUserSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters").optional(),
   email: z.string().email("Invalid email address").optional(),
+  password: z.string().min(6, "Password must be at least 6 characters").optional().or(z.literal("")),
   roleId: z.string().optional(),
   isActive: z.boolean().optional(),
   practiceAreaIds: z.array(z.string()).optional(),
@@ -126,6 +127,7 @@ export default function AdminUsersPage() {
     defaultValues: {
       name: "",
       email: "",
+      password: "",
       roleId: "",
       isActive: true,
       practiceAreaIds: [],
@@ -137,6 +139,7 @@ export default function AdminUsersPage() {
       editForm.reset({
         name: editingUser.name,
         email: editingUser.email,
+        password: "",
         roleId: editingUser.roleId || "",
         isActive: editingUser.isActive,
         practiceAreaIds: editingUser.practiceAreaIds || [],
@@ -173,6 +176,7 @@ export default function AdminUsersPage() {
       const payload = Object.fromEntries(
         Object.entries(data).filter(([key, v]) => {
           if (key === 'practiceAreaIds') return v !== undefined; // Keep arrays even if empty
+          if (key === 'password' && (!v || v === "")) return false; // Don't send empty password
           return v !== undefined && v !== "";
         })
       );
@@ -554,6 +558,27 @@ export default function AdminUsersPage() {
                     <FormControl>
                       <Input type="email" {...field} data-testid="input-edit-user-email" />
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={editForm.control}
+                name="password"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>New Password</FormLabel>
+                    <FormControl>
+                      <Input 
+                        type="password" 
+                        placeholder="Leave blank to keep current password" 
+                        {...field} 
+                        data-testid="input-edit-user-password"
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Only fill this if you want to change the user's password
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
