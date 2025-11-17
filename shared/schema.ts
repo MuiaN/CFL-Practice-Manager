@@ -56,16 +56,28 @@ export const caseAssignments = pgTable("case_assignments", {
   assignedAt: timestamp("assigned_at").notNull().defaultNow(),
 });
 
+export const folders = pgTable("folders", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  description: text("description"),
+  createdById: varchar("created_by_id").notNull().references(() => users.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 export const documents = pgTable("documents", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   type: text("type").notNull(),
+  mimeType: text("mime_type"),
   size: text("size").notNull(),
-  caseId: varchar("case_id").notNull().references(() => cases.id, { onDelete: "cascade" }),
+  caseId: varchar("case_id").references(() => cases.id, { onDelete: "cascade" }),
+  folderId: varchar("folder_id").references(() => folders.id, { onDelete: "cascade" }),
   uploadedById: varchar("uploaded_by_id").notNull().references(() => users.id),
   version: text("version").notNull().default("1"),
   filePath: text("file_path").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
 export const insertRoleSchema = createInsertSchema(roles).omit({
@@ -95,9 +107,16 @@ export const insertCaseSchema = createInsertSchema(cases).omit({
   updatedAt: true,
 });
 
+export const insertFolderSchema = createInsertSchema(folders).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 export const insertDocumentSchema = createInsertSchema(documents).omit({
   id: true,
   createdAt: true,
+  updatedAt: true,
 });
 
 export const insertCaseAssignmentSchema = createInsertSchema(caseAssignments).omit({
@@ -119,6 +138,9 @@ export type UserPracticeArea = typeof userPracticeAreas.$inferSelect;
 
 export type InsertCase = z.infer<typeof insertCaseSchema>;
 export type Case = typeof cases.$inferSelect;
+
+export type InsertFolder = z.infer<typeof insertFolderSchema>;
+export type Folder = typeof folders.$inferSelect;
 
 export type InsertDocument = z.infer<typeof insertDocumentSchema>;
 export type Document = typeof documents.$inferSelect;

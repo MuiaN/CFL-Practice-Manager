@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { generateToken, verifyPassword, authenticateToken, requireAdmin, type AuthRequest } from "./auth";
-import { insertUserSchema, insertCaseSchema, insertDocumentSchema, insertCaseAssignmentSchema, insertRoleSchema, insertPracticeAreaSchema } from "@shared/schema";
+import { insertUserSchema, insertCaseSchema, insertDocumentSchema, insertCaseAssignmentSchema, insertRoleSchema, insertPracticeAreaSchema, insertFolderSchema } from "@shared/schema";
 import multer from "multer";
 import path from "path";
 import { z } from "zod";
@@ -422,16 +422,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "File required" });
       }
 
-      const { caseId } = req.body;
-      if (!caseId) {
-        return res.status(400).json({ message: "Case ID required" });
+      const { caseId, folderId } = req.body;
+      if (!caseId && !folderId) {
+        return res.status(400).json({ message: "Either Case ID or Folder ID required" });
       }
 
+      if (caseId && folderId) {
+        return res.status(400).json({ message: "Document can belong to either a case or folder, not both" });
+      }
+
+      const fileExtension = path.extname(req.file.originalname).substring(1).toUpperCase();
       const documentData = {
         name: req.file.originalname,
-        type: path.extname(req.file.originalname).substring(1).toUpperCase(),
+        type: fileExtension,
+        mimeType: req.file.mimetype,
         size: `${Math.round(req.file.size / 1024)} KB`,
-        caseId,
+        caseId: caseId || null,
+        folderId: folderId || null,
         uploadedById: req.userId!,
         filePath: req.file.path,
         version: "1",
@@ -454,17 +461,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Document not found" });
       }
 
-      const caseItem = await storage.getCaseById(document.caseId);
-      if (!caseItem) {
-        return res.status(404).json({ message: "Associated case not found" });
-      }
+      if (document.caseId) {
+        const caseItem = await storage.getCaseById(document.caseId);
+        if (!caseItem) {
+          return res.status(404).json({ message: "Associated case not found" });
+        }
 
-      if (req.userRole !== "admin" && caseItem.createdById !== req.userId) {
-        const assignedUsers = await storage.getUsersForCase(document.caseId);
-        const isAssigned = assignedUsers.some(user => user.id === req.userId);
-        
-        if (!isAssigned) {
-          return res.status(403).json({ message: "Access denied. You must be assigned to this case." });
+        if (req.userRole !== "admin" && caseItem.createdById !== req.userId) {
+          const assignedUsers = await storage.getUsersForCase(document.caseId);
+          const isAssigned = assignedUsers.some(user => user.id === req.userId);
+          
+          if (!isAssigned) {
+            return res.status(403).json({ message: "Access denied. You must be assigned to this case." });
+          }
+        }
+      } else if (document.folderId) {
+        const folder = await storage.getFolderById(document.folderId);
+        if (!folder) {
+          return res.status(404).json({ message: "Associated folder not found" });
+        }
+
+        if (req.userRole !== "admin" && folder.createdById !== req.userId) {
+          return res.status(403).json({ message: "Access denied to this folder." });
         }
       }
 
@@ -513,6 +531,220 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(204).send();
     } catch (error) {
       console.error("Delete document error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.patch("/api/documents/:id", authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const updates = insertDocumentSchema.partial().parse(req.body);
+      
+      const document = await storage.updateDocument(id, updates);
+      if (!document) {
+        return res.status(404).json({ message: "Document not found" });
+      }
+      
+      res.json(document);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid document data", errors: error.errors });
+      }
+      console.error("Update document error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/documents/:id/download", authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const document = await storage.getDocumentById(id);
+      
+      if (!document) {
+        return res.status(404).json({ message: "Document not found" });
+      }
+
+      if (document.caseId) {
+        const caseItem = await storage.getCaseById(document.caseId);
+        if (!caseItem) {
+          return res.status(404).json({ message: "Associated case not found" });
+        }
+
+        if (req.userRole !== "admin" && caseItem.createdById !== req.userId) {
+          const assignedUsers = await storage.getUsersForCase(document.caseId);
+          const isAssigned = assignedUsers.some(user => user.id === req.userId);
+          
+          if (!isAssigned) {
+            return res.status(403).json({ message: "Access denied. You must be assigned to this case." });
+          }
+        }
+      } else if (document.folderId) {
+        const folder = await storage.getFolderById(document.folderId);
+        if (!folder) {
+          return res.status(404).json({ message: "Associated folder not found" });
+        }
+
+        if (req.userRole !== "admin" && folder.createdById !== req.userId) {
+          return res.status(403).json({ message: "Access denied to this folder." });
+        }
+      }
+
+      res.download(document.filePath, document.name);
+    } catch (error) {
+      console.error("Download document error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/folders", authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      let folders;
+      if (req.userRole === "admin") {
+        folders = await storage.getAllFolders();
+      } else {
+        folders = await storage.getFoldersByUser(req.userId!);
+      }
+      
+      const foldersWithCount = await Promise.all(
+        folders.map(async (folder) => {
+          const documents = await storage.getDocumentsByFolder(folder.id);
+          return { ...folder, documentCount: documents.length };
+        })
+      );
+      
+      res.json(foldersWithCount);
+    } catch (error) {
+      console.error("Get folders error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/folders", authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      const folderData = insertFolderSchema.parse({
+        ...req.body,
+        createdById: req.userId,
+      });
+      const folder = await storage.createFolder(folderData);
+      res.status(201).json({ ...folder, documentCount: 0 });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid folder data", errors: error.errors });
+      }
+      console.error("Create folder error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/folders/:id", authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const folder = await storage.getFolderById(id);
+      
+      if (!folder) {
+        return res.status(404).json({ message: "Folder not found" });
+      }
+
+      if (req.userRole !== "admin" && folder.createdById !== req.userId) {
+        return res.status(403).json({ message: "Access denied to this folder" });
+      }
+
+      const documents = await storage.getDocumentsByFolder(folder.id);
+      res.json({ ...folder, documentCount: documents.length });
+    } catch (error) {
+      console.error("Get folder error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.patch("/api/folders/:id", authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const folder = await storage.getFolderById(id);
+      
+      if (!folder) {
+        return res.status(404).json({ message: "Folder not found" });
+      }
+
+      if (req.userRole !== "admin" && folder.createdById !== req.userId) {
+        return res.status(403).json({ message: "Access denied to this folder" });
+      }
+
+      const updates = insertFolderSchema.partial().parse(req.body);
+      const updatedFolder = await storage.updateFolder(id, updates);
+      
+      if (!updatedFolder) {
+        return res.status(404).json({ message: "Folder not found" });
+      }
+      
+      const documents = await storage.getDocumentsByFolder(updatedFolder.id);
+      res.json({ ...updatedFolder, documentCount: documents.length });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid folder data", errors: error.errors });
+      }
+      console.error("Update folder error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/folders/:id", authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const folder = await storage.getFolderById(id);
+      
+      if (!folder) {
+        return res.status(404).json({ message: "Folder not found" });
+      }
+
+      if (req.userRole !== "admin" && folder.createdById !== req.userId) {
+        return res.status(403).json({ message: "Access denied to this folder" });
+      }
+
+      await storage.deleteFolder(id);
+      res.status(204).send();
+    } catch (error: any) {
+      if (error.message && error.message.includes("Cannot delete folder")) {
+        return res.status(400).json({ message: error.message });
+      }
+      console.error("Delete folder error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/folders/:id/documents", authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const folder = await storage.getFolderById(id);
+      
+      if (!folder) {
+        return res.status(404).json({ message: "Folder not found" });
+      }
+
+      if (req.userRole !== "admin" && folder.createdById !== req.userId) {
+        return res.status(403).json({ message: "Access denied to this folder" });
+      }
+      
+      const documents = await storage.getDocumentsByFolder(id);
+      res.json(documents);
+    } catch (error) {
+      console.error("Get folder documents error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/users/:userId/documents", authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      const { userId } = req.params;
+      
+      if (req.userRole !== "admin" && req.userId !== userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      const documents = await storage.getDocumentsByUser(userId);
+      res.json(documents);
+    } catch (error) {
+      console.error("Get user documents error:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   });

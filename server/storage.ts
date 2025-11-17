@@ -13,6 +13,8 @@ import {
   type InsertPracticeArea,
   type UserPracticeArea,
   type InsertUserPracticeArea,
+  type Folder,
+  type InsertFolder,
   users,
   cases,
   documents,
@@ -20,6 +22,7 @@ import {
   roles,
   practiceAreas,
   userPracticeAreas,
+  folders,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, ilike, or } from "drizzle-orm";
@@ -64,8 +67,18 @@ export interface IStorage {
   createDocument(document: InsertDocument): Promise<Document>;
   getDocumentById(id: string): Promise<Document | undefined>;
   getDocumentsByCase(caseId: string): Promise<Document[]>;
+  getDocumentsByFolder(folderId: string): Promise<Document[]>;
+  getDocumentsByUser(userId: string): Promise<Document[]>;
   getAllDocuments(): Promise<Document[]>;
+  updateDocument(id: string, updates: Partial<InsertDocument>): Promise<Document | undefined>;
   deleteDocument(id: string): Promise<boolean>;
+  
+  createFolder(folder: InsertFolder): Promise<Folder>;
+  getFolderById(id: string): Promise<Folder | undefined>;
+  getFoldersByUser(userId: string): Promise<Folder[]>;
+  getAllFolders(): Promise<Folder[]>;
+  updateFolder(id: string, updates: Partial<InsertFolder>): Promise<Folder | undefined>;
+  deleteFolder(id: string): Promise<boolean>;
 }
 
 export class DbStorage implements IStorage {
@@ -346,6 +359,95 @@ export class DbStorage implements IStorage {
     return await db.select().from(practiceAreas).where(
       or(...paIds.map((id) => eq(practiceAreas.id, id)))
     );
+  }
+
+  async createFolder(folderData: InsertFolder): Promise<Folder> {
+    const [folder] = await db.insert(folders).values(folderData).returning();
+    return folder;
+  }
+
+  async getFolderById(id: string): Promise<Folder | undefined> {
+    const [folder] = await db.select().from(folders).where(eq(folders.id, id));
+    return folder;
+  }
+
+  async getFoldersByUser(userId: string): Promise<Folder[]> {
+    return await db
+      .select()
+      .from(folders)
+      .where(eq(folders.createdById, userId))
+      .orderBy(desc(folders.updatedAt));
+  }
+
+  async getAllFolders(): Promise<Folder[]> {
+    return await db.select().from(folders).orderBy(desc(folders.updatedAt));
+  }
+
+  async updateFolder(id: string, updates: Partial<InsertFolder>): Promise<Folder | undefined> {
+    const [folder] = await db
+      .update(folders)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(folders.id, id))
+      .returning();
+    return folder;
+  }
+
+  async deleteFolder(id: string): Promise<boolean> {
+    const folderDocuments = await db.select().from(documents).where(eq(documents.folderId, id));
+    if (folderDocuments.length > 0) {
+      throw new Error("Cannot delete folder with existing documents. Please delete or move documents first.");
+    }
+    const result = await db.delete(folders).where(eq(folders.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  async getDocumentsByFolder(folderId: string): Promise<Document[]> {
+    return await db
+      .select()
+      .from(documents)
+      .where(eq(documents.folderId, folderId))
+      .orderBy(desc(documents.createdAt));
+  }
+
+  async getDocumentsByUser(userId: string): Promise<Document[]> {
+    const userCases = await db
+      .select({ caseId: caseAssignments.caseId })
+      .from(caseAssignments)
+      .where(eq(caseAssignments.userId, userId));
+    
+    const caseIds = userCases.map((a) => a.caseId);
+    
+    const userFolders = await db
+      .select({ folderId: folders.id })
+      .from(folders)
+      .where(eq(folders.createdById, userId));
+    
+    const folderIds = userFolders.map((f) => f.folderId);
+    
+    const conditions = [];
+    if (caseIds.length > 0) {
+      conditions.push(...caseIds.map((id) => eq(documents.caseId, id)));
+    }
+    if (folderIds.length > 0) {
+      conditions.push(...folderIds.map((id) => eq(documents.folderId, id)));
+    }
+    
+    if (conditions.length === 0) return [];
+    
+    return await db
+      .select()
+      .from(documents)
+      .where(or(...conditions))
+      .orderBy(desc(documents.createdAt));
+  }
+
+  async updateDocument(id: string, updates: Partial<InsertDocument>): Promise<Document | undefined> {
+    const [document] = await db
+      .update(documents)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(documents.id, id))
+      .returning();
+    return document;
   }
 }
 
