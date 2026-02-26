@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { generateToken, verifyPassword, authenticateToken, requireAdmin, type AuthRequest } from "./auth";
-import { insertUserSchema, insertCaseSchema, insertDocumentSchema, insertCaseAssignmentSchema } from "@shared/schema";
+import { insertUserSchema, insertCaseSchema, insertDocumentSchema, insertCaseAssignmentSchema, insertRoleSchema, insertPracticeAreaSchema } from "@shared/schema";
 import multer from "multer";
 import path from "path";
 import { z } from "zod";
@@ -55,6 +55,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(userWithoutPassword);
     } catch (error) {
       console.error("Get current user error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Roles
+  app.get("/api/roles", authenticateToken, async (req, res) => {
+    try {
+      const allRoles = await storage.getRoles();
+      res.json(allRoles);
+    } catch (error) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/roles", authenticateToken, requireAdmin, async (req, res) => {
+    try {
+      const roleData = insertRoleSchema.parse(req.body);
+      const role = await storage.createRole(roleData);
+      res.status(201).json(role);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid role data" });
+    }
+  });
+
+  app.delete("/api/roles/:id", authenticateToken, requireAdmin, async (req, res) => {
+    try {
+      await storage.deleteRole(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Practice Areas
+  app.get("/api/practice-areas", authenticateToken, async (req, res) => {
+    try {
+      const pas = await storage.getPracticeAreas();
+      res.json(pas);
+    } catch (error) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/practice-areas", authenticateToken, requireAdmin, async (req, res) => {
+    try {
+      const paData = insertPracticeAreaSchema.parse(req.body);
+      const pa = await storage.createPracticeArea(paData);
+      res.status(201).json(pa);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid practice area data" });
+    }
+  });
+
+  app.delete("/api/practice-areas/:id", authenticateToken, requireAdmin, async (req, res) => {
+    try {
+      await storage.deletePracticeArea(req.params.id);
+      res.status(204).send();
+    } catch (error) {
       res.status(500).json({ message: "Internal server error" });
     }
   });

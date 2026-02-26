@@ -62,11 +62,6 @@ export default function AppSidebar({ user }: AppSidebarProps) {
       url: "/admin/users",
       icon: Users,
     },
-    {
-      title: "Settings",
-      url: "/admin/settings",
-      icon: Settings,
-    },
   ];
 
   const getInitials = (name: string) => {

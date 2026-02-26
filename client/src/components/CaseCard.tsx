@@ -1,6 +1,6 @@
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Clock, MoreVertical } from "lucide-react";
 import {
@@ -13,33 +13,18 @@ import {
 interface CaseCardProps {
   caseNumber: string;
   title: string;
-  practiceArea:
-    | "Corporate & Commercial"
-    | "Intellectual Property"
-    | "Real Estate"
-    | "Banking & Finance"
-    | "Dispute Resolution"
-    | "TMT";
-  status: "Active" | "Pending" | "Closed" | "Under Review";
-  assignedTo: Array<{ name: string; initials: string; avatar?: string }>;
+  practiceArea: string;
+  status: "active" | "pending" | "closed" | "under_review";
+  assignedTo: Array<{ name: string; initials: string }>;
   lastUpdated: string;
   onClick?: () => void;
 }
 
-const practiceAreaColors: Record<string, string> = {
-  "Corporate & Commercial": "bg-chart-1/10 text-chart-1 border-chart-1/20",
-  "Intellectual Property": "bg-chart-2/10 text-chart-2 border-chart-2/20",
-  "Real Estate": "bg-chart-3/10 text-chart-3 border-chart-3/20",
-  "Banking & Finance": "bg-chart-4/10 text-chart-4 border-chart-4/20",
-  "Dispute Resolution": "bg-chart-5/10 text-chart-5 border-chart-5/20",
-  TMT: "bg-primary/10 text-primary border-primary/20",
-};
-
 const statusColors: Record<string, string> = {
-  Active: "bg-status-online/10 text-status-online border-status-online/20",
-  Pending: "bg-status-away/10 text-status-away border-status-away/20",
-  Closed: "bg-muted text-muted-foreground border-muted",
-  "Under Review": "bg-status-busy/10 text-status-busy border-status-busy/20",
+  active: "bg-status-online/10 text-status-online border-status-online/20",
+  pending: "bg-status-away/10 text-status-away border-status-away/20",
+  closed: "bg-muted text-muted-foreground border-muted",
+  under_review: "bg-status-busy/10 text-status-busy border-status-busy/20",
 };
 
 export default function CaseCard({
@@ -51,70 +36,62 @@ export default function CaseCard({
   lastUpdated,
   onClick,
 }: CaseCardProps) {
+  const statusLabel = status.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+
   return (
-    <Card className="hover-elevate cursor-pointer" onClick={onClick} data-testid={`card-case-${caseNumber}`}>
+    <Card className="hover-elevate cursor-pointer h-full flex flex-col" onClick={onClick} data-testid={`card-case-${caseNumber}`}>
       <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0 pb-2">
         <div className="flex-1 min-w-0">
-          <p className="font-mono text-sm text-muted-foreground mb-1">
+          <p className="font-mono text-xs text-muted-foreground mb-1 uppercase tracking-wider">
             {caseNumber}
           </p>
-          <h3 className="font-semibold leading-tight line-clamp-2">{title}</h3>
+          <h3 className="font-semibold leading-tight line-clamp-2 text-sm md:text-base">{title}</h3>
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 -mr-2"
-              data-testid={`button-case-menu-${caseNumber}`}
-            >
+            <Button variant="ghost" size="icon" className="h-8 w-8 -mr-2">
               <MoreVertical className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem data-testid="menu-view">View Details</DropdownMenuItem>
-            <DropdownMenuItem data-testid="menu-edit">Edit Case</DropdownMenuItem>
-            <DropdownMenuItem data-testid="menu-assign">Reassign</DropdownMenuItem>
+            <DropdownMenuItem>View Details</DropdownMenuItem>
+            <DropdownMenuItem>Edit Case</DropdownMenuItem>
+            <DropdownMenuItem>Manage Files</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 flex-1">
         <div className="flex flex-wrap gap-2">
-          <Badge
-            variant="outline"
-            className={`border ${practiceAreaColors[practiceArea]}`}
-            data-testid="badge-practice-area"
-          >
+          <Badge variant="outline" className="text-[10px] font-medium">
             {practiceArea}
           </Badge>
-          <Badge
-            variant="outline"
-            className={`border ${statusColors[status]}`}
-            data-testid="badge-status"
-          >
-            {status}
+          <Badge variant="outline" className={`text-[10px] font-medium border ${statusColors[status] || statusColors.pending}`}>
+            {statusLabel}
           </Badge>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex -space-x-2">
-            {assignedTo.slice(0, 3).map((person, idx) => (
-              <Avatar key={idx} className="h-8 w-8 border-2 border-card">
-                <AvatarImage src={person.avatar} />
-                <AvatarFallback className="text-xs">{person.initials}</AvatarFallback>
-              </Avatar>
-            ))}
+            {assignedTo && assignedTo.length > 0 ? (
+              assignedTo.slice(0, 3).map((person, idx) => (
+                <Avatar key={idx} className="h-6 w-6 border-2 border-card">
+                  <AvatarFallback className="text-[8px]">{person.initials}</AvatarFallback>
+                </Avatar>
+              ))
+            ) : (
+              <span className="text-[10px] text-muted-foreground italic pl-2">Unassigned</span>
+            )}
           </div>
-          {assignedTo.length > 3 && (
-            <span className="text-xs text-muted-foreground">
+          {assignedTo && assignedTo.length > 3 && (
+            <span className="text-[10px] text-muted-foreground">
               +{assignedTo.length - 3} more
             </span>
           )}
         </div>
       </CardContent>
-      <CardFooter className="pt-4 border-t">
-        <div className="flex items-center text-xs text-muted-foreground">
+      <CardFooter className="pt-3 border-t bg-muted/30 mt-auto">
+        <div className="flex items-center text-[10px] text-muted-foreground">
           <Clock className="h-3 w-3 mr-1" />
-          Updated {lastUpdated}
+          {lastUpdated}
         </div>
       </CardFooter>
     </Card>

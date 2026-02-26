@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -28,146 +28,198 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, MoreVertical } from "lucide-react";
+import { Plus, Search, MoreVertical, Shield, Briefcase } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  role: "Admin" | "Senior Associate" | "Associate";
-  practiceAreas: string[];
-  status: "Active" | "Inactive";
-}
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { type User, type Role, type PracticeArea } from "@shared/schema";
 
 export default function AdminUsersPage() {
+  const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isCreateUserOpen, setIsCreateUserOpen] = useState(false);
+  const [isCreateRoleOpen, setIsCreateRoleOpen] = useState(false);
+  const [isCreatePAOpen, setIsCreatePAOpen] = useState(false);
+
+  // Form states
   const [newUserName, setNewUserName] = useState("");
   const [newUserEmail, setNewUserEmail] = useState("");
-  const [newUserRole, setNewUserRole] = useState("");
+  const [newUserPassword, setNewUserPassword] = useState("password123");
+  const [newUserRole, setNewUserRole] = useState("associate");
+  const [newUserCustomRole, setNewUserCustomRole] = useState("");
 
-  const mockUsers: User[] = [
-    {
-      id: "1",
-      name: "Sarah Kimani",
-      email: "sarah.kimani@cfllegal.co.ke",
-      role: "Senior Associate",
-      practiceAreas: ["Corporate & Commercial", "Banking & Finance"],
-      status: "Active",
-    },
-    {
-      id: "2",
-      name: "John Mwangi",
-      email: "john.mwangi@cfllegal.co.ke",
-      role: "Admin",
-      practiceAreas: ["All Practice Areas"],
-      status: "Active",
-    },
-    {
-      id: "3",
-      name: "Mary Wanjiru",
-      email: "mary.wanjiru@cfllegal.co.ke",
-      role: "Associate",
-      practiceAreas: ["Intellectual Property", "TMT"],
-      status: "Active",
-    },
-    {
-      id: "4",
-      name: "Peter Ochieng",
-      email: "peter.ochieng@cfllegal.co.ke",
-      role: "Senior Associate",
-      practiceAreas: ["Real Estate", "Corporate & Commercial"],
-      status: "Active",
-    },
-  ];
+  const [roleName, setRoleName] = useState("");
+  const [roleDesc, setRoleDesc] = useState("");
+  const [paName, setPaName] = useState("");
+  const [paDesc, setPaDesc] = useState("");
+
+  const { data: users = [] } = useQuery<User[]>({ queryKey: ["/api/users"] });
+  const { data: roles = [] } = useQuery<Role[]>({ queryKey: ["/api/roles"] });
+  const { data: practiceAreas = [] } = useQuery<PracticeArea[]>({ queryKey: ["/api/practice-areas"] });
+
+  const createUserMutation = useMutation({
+    mutationFn: async (data: any) => apiRequest("POST", "/api/users", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      setIsCreateUserOpen(false);
+      toast({ title: "User created successfully" });
+    }
+  });
+
+  const createRoleMutation = useMutation({
+    mutationFn: async (data: any) => apiRequest("POST", "/api/roles", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/roles"] });
+      setIsCreateRoleOpen(false);
+      setRoleName("");
+      setRoleDesc("");
+      toast({ title: "Role created successfully" });
+    }
+  });
+
+  const createPAMutation = useMutation({
+    mutationFn: async (data: any) => apiRequest("POST", "/api/practice-areas", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/practice-areas"] });
+      setIsCreatePAOpen(false);
+      setPaName("");
+      setPaDesc("");
+      toast({ title: "Practice Area created successfully" });
+    }
+  });
 
   const handleCreateUser = () => {
-    console.log("Creating user:", { newUserName, newUserEmail, newUserRole });
-    setIsCreateDialogOpen(false);
-    setNewUserName("");
-    setNewUserEmail("");
-    setNewUserRole("");
+    createUserMutation.mutate({
+      name: newUserName,
+      email: newUserEmail,
+      password: newUserPassword,
+      role: newUserRole,
+      customRoleId: newUserCustomRole || null,
+    });
   };
+
+  const filteredUsers = users.filter(u => 
+    u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    u.email.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">User Management</h1>
+          <h1 className="text-3xl font-bold tracking-tight">System Administration</h1>
           <p className="text-muted-foreground mt-1">
-            Manage staff accounts and permissions
+            Manage users, roles, and practice areas
           </p>
         </div>
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-          <DialogTrigger asChild>
-            <Button data-testid="button-create-user">
-              <Plus className="h-4 w-4 mr-2" />
-              Create User
-            </Button>
-          </DialogTrigger>
-          <DialogContent data-testid="dialog-create-user">
-            <DialogHeader>
-              <DialogTitle>Create New User</DialogTitle>
-              <DialogDescription>
-                Add a new staff member to the system
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Full Name</Label>
-                <Input
-                  id="name"
-                  placeholder="John Doe"
-                  value={newUserName}
-                  onChange={(e) => setNewUserName(e.target.value)}
-                  data-testid="input-user-name"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="john.doe@cfllegal.co.ke"
-                  value={newUserEmail}
-                  onChange={(e) => setNewUserEmail(e.target.value)}
-                  data-testid="input-user-email"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="role">Role</Label>
-                <Select value={newUserRole} onValueChange={setNewUserRole}>
-                  <SelectTrigger id="role" data-testid="select-user-role">
-                    <SelectValue placeholder="Select role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="admin">Admin</SelectItem>
-                    <SelectItem value="senior">Senior Associate</SelectItem>
-                    <SelectItem value="associate">Associate</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setIsCreateDialogOpen(false)}
-                data-testid="button-cancel"
-              >
-                Cancel
+        <div className="flex gap-2">
+          <Dialog open={isCreateRoleOpen} onOpenChange={setIsCreateRoleOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" data-testid="button-create-role">
+                <Shield className="h-4 w-4 mr-2" />
+                New Role
               </Button>
-              <Button onClick={handleCreateUser} data-testid="button-save-user">
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Create Custom Role</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label>Role Name</Label>
+                  <Input value={roleName} onChange={e => setRoleName(e.target.value)} placeholder="e.g. Senior Partner" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Description</Label>
+                  <Input value={roleDesc} onChange={e => setRoleDesc(e.target.value)} placeholder="Role responsibilities" />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button onClick={() => createRoleMutation.mutate({ name: roleName, description: roleDesc })}>Create Role</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={isCreatePAOpen} onOpenChange={setIsCreatePAOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" data-testid="button-create-pa">
+                <Briefcase className="h-4 w-4 mr-2" />
+                New Practice Area
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Create Practice Area</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label>Name</Label>
+                  <Input value={paName} onChange={e => setPaName(e.target.value)} placeholder="e.g. Maritime Law" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Description</Label>
+                  <Input value={paDesc} onChange={e => setPaDesc(e.target.value)} placeholder="Practice area details" />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button onClick={() => createPAMutation.mutate({ name: paName, description: paDesc })}>Create Area</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={isCreateUserOpen} onOpenChange={setIsCreateUserOpen}>
+            <DialogTrigger asChild>
+              <Button data-testid="button-create-user">
+                <Plus className="h-4 w-4 mr-2" />
                 Create User
               </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Create New User</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label>Full Name</Label>
+                  <Input value={newUserName} onChange={e => setNewUserName(e.target.value)} placeholder="John Doe" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Email</Label>
+                  <Input type="email" value={newUserEmail} onChange={e => setNewUserEmail(e.target.value)} placeholder="john@cfllegal.co.ke" />
+                </div>
+                <div className="space-y-2">
+                  <Label>System Role</Label>
+                  <Select value={newUserRole} onValueChange={setNewUserRole}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="admin">Admin</SelectItem>
+                      <SelectItem value="senior_associate">Senior Associate</SelectItem>
+                      <SelectItem value="associate">Associate</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Custom Role (Optional)</Label>
+                  <Select value={newUserCustomRole} onValueChange={setNewUserCustomRole}>
+                    <SelectTrigger><SelectValue placeholder="Select custom role" /></SelectTrigger>
+                    <SelectContent>
+                      {roles.map(r => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button onClick={handleCreateUser} disabled={createUserMutation.isPending}>Create User</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       <div className="flex items-center gap-4">
@@ -178,7 +230,6 @@ export default function AdminUsersPage() {
             className="pl-9"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            data-testid="input-search-users"
           />
         </div>
       </div>
@@ -189,79 +240,41 @@ export default function AdminUsersPage() {
             <TableRow>
               <TableHead>User</TableHead>
               <TableHead>Email</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>Practice Areas</TableHead>
+              <TableHead>System Role</TableHead>
+              <TableHead>Custom Role</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="w-12"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {mockUsers.map((user) => (
-              <TableRow key={user.id} data-testid={`row-user-${user.id}`}>
+            {filteredUsers.map((user) => (
+              <TableRow key={user.id}>
                 <TableCell>
                   <div className="flex items-center gap-3">
                     <Avatar className="h-8 w-8">
-                      <AvatarImage src="" />
-                      <AvatarFallback>
-                        {user.name
-                          .split(" ")
-                          .map((n) => n[0])
-                          .join("")}
-                      </AvatarFallback>
+                      <AvatarFallback>{user.name.split(" ").map(n => n[0]).join("")}</AvatarFallback>
                     </Avatar>
                     <span className="font-medium">{user.name}</span>
                   </div>
                 </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {user.email}
+                <TableCell className="text-muted-foreground">{user.email}</TableCell>
+                <TableCell><Badge variant="secondary">{user.role}</Badge></TableCell>
+                <TableCell>
+                  {user.customRoleId ? (
+                    <Badge variant="outline">{roles.find(r => r.id === user.customRoleId)?.name || "Unknown"}</Badge>
+                  ) : "-"}
                 </TableCell>
                 <TableCell>
-                  <Badge variant="secondary">{user.role}</Badge>
-                </TableCell>
-                <TableCell>
-                  <div className="flex flex-wrap gap-1">
-                    {user.practiceAreas.slice(0, 2).map((area, idx) => (
-                      <Badge key={idx} variant="outline" className="text-xs">
-                        {area}
-                      </Badge>
-                    ))}
-                    {user.practiceAreas.length > 2 && (
-                      <Badge variant="outline" className="text-xs">
-                        +{user.practiceAreas.length - 2}
-                      </Badge>
-                    )}
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <Badge
-                    variant="outline"
-                    className={
-                      user.status === "Active"
-                        ? "bg-status-online/10 text-status-online border-status-online/20"
-                        : "bg-muted text-muted-foreground"
-                    }
-                  >
-                    {user.status}
-                  </Badge>
+                  <Badge variant="outline" className="bg-status-online/10 text-status-online border-status-online/20">Active</Badge>
                 </TableCell>
                 <TableCell>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        data-testid={`button-user-menu-${user.id}`}
-                      >
-                        <MoreVertical className="h-4 w-4" />
-                      </Button>
+                      <Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem>Edit User</DropdownMenuItem>
-                      <DropdownMenuItem>Assign Practice Areas</DropdownMenuItem>
-                      <DropdownMenuItem>Reset Password</DropdownMenuItem>
-                      <DropdownMenuItem className="text-destructive">
-                        Deactivate
-                      </DropdownMenuItem>
+                      <DropdownMenuItem>Edit</DropdownMenuItem>
+                      <DropdownMenuItem className="text-destructive">Deactivate</DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </TableCell>

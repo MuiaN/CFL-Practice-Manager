@@ -7,10 +7,16 @@ import {
   type InsertDocument,
   type CaseAssignment,
   type InsertCaseAssignment,
+  type Role,
+  type InsertRole,
+  type PracticeArea,
+  type InsertPracticeArea,
   users,
   cases,
   documents,
   caseAssignments,
+  roles,
+  practiceAreas,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, ilike, or } from "drizzle-orm";
@@ -40,6 +46,14 @@ export interface IStorage {
   getDocumentsByCase(caseId: string): Promise<Document[]>;
   getAllDocuments(): Promise<Document[]>;
   deleteDocument(id: string): Promise<boolean>;
+
+  createRole(role: InsertRole): Promise<Role>;
+  getRoles(): Promise<Role[]>;
+  deleteRole(id: string): Promise<boolean>;
+
+  createPracticeArea(pa: InsertPracticeArea): Promise<PracticeArea>;
+  getPracticeAreas(): Promise<PracticeArea[]>;
+  deletePracticeArea(id: string): Promise<boolean>;
 }
 
 export class DbStorage implements IStorage {
@@ -101,10 +115,17 @@ export class DbStorage implements IStorage {
       .where(eq(caseAssignments.userId, userId));
     
     const caseIds = assignments.map((a: { caseId: string }) => a.caseId);
-    if (caseIds.length === 0) return [];
+    
+    // Also include cases created by the user
+    const createdCases = await db.select({ id: cases.id }).from(cases).where(eq(cases.createdById, userId));
+    const createdIds = createdCases.map(c => c.id);
+    
+    const allIds = Array.from(new Set([...caseIds, ...createdIds]));
+    
+    if (allIds.length === 0) return [];
     
     return await db.select().from(cases).where(
-      or(...caseIds.map((id: string) => eq(cases.id, id)))
+      or(...allIds.map((id: string) => eq(cases.id, id)))
     );
   }
 
@@ -205,6 +226,34 @@ export class DbStorage implements IStorage {
 
   async deleteDocument(id: string): Promise<boolean> {
     const result = await db.delete(documents).where(eq(documents.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  async createRole(role: InsertRole): Promise<Role> {
+    const [newRole] = await db.insert(roles).values(role).returning();
+    return newRole;
+  }
+
+  async getRoles(): Promise<Role[]> {
+    return await db.select().from(roles).orderBy(desc(roles.createdAt));
+  }
+
+  async deleteRole(id: string): Promise<boolean> {
+    const result = await db.delete(roles).where(eq(roles.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  async createPracticeArea(pa: InsertPracticeArea): Promise<PracticeArea> {
+    const [newPA] = await db.insert(practiceAreas).values(pa).returning();
+    return newPA;
+  }
+
+  async getPracticeAreas(): Promise<PracticeArea[]> {
+    return await db.select().from(practiceAreas).orderBy(desc(practiceAreas.createdAt));
+  }
+
+  async deletePracticeArea(id: string): Promise<boolean> {
+    const result = await db.delete(practiceAreas).where(eq(practiceAreas.id, id));
     return result.rowCount ? result.rowCount > 0 : false;
   }
 }

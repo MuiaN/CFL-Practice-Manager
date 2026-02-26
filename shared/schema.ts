@@ -14,13 +14,29 @@ export const practiceAreaEnum = pgEnum("practice_area", [
   "tmt"
 ]);
 
+export const roles = pgTable("roles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(),
+  description: text("description"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const practiceAreas = pgTable("practice_areas", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(),
+  description: text("description"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   email: text("email").notNull().unique(),
   password: text("password").notNull(),
   name: text("name").notNull(),
   role: userRoleEnum("role").notNull().default("associate"),
+  customRoleId: varchar("custom_role_id").references(() => roles.id),
   practiceAreas: practiceAreaEnum("practice_areas").array(),
+  customPracticeAreaIds: varchar("custom_practice_area_ids").array(),
   isActive: text("is_active").notNull().default("true"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
@@ -31,6 +47,7 @@ export const cases = pgTable("cases", {
   title: text("title").notNull(),
   description: text("description"),
   practiceArea: practiceAreaEnum("practice_area").notNull(),
+  customPracticeAreaId: varchar("custom_practice_area_id").references(() => practiceAreas.id),
   status: caseStatusEnum("status").notNull().default("pending"),
   createdById: varchar("created_by_id").notNull().references(() => users.id),
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -56,6 +73,16 @@ export const documents = pgTable("documents", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+export const insertRoleSchema = createInsertSchema(roles).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertPracticeAreaSchema = createInsertSchema(practiceAreas).omit({
+  id: true,
+  createdAt: true,
+});
+
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
   createdAt: true,
@@ -77,14 +104,20 @@ export const insertCaseAssignmentSchema = createInsertSchema(caseAssignments).om
   assignedAt: true,
 });
 
-export type InsertUser = z.infer<typeof insertUserSchema>;
+export type Role = typeof roles.$inferSelect;
+export type InsertRole = z.infer<typeof insertRoleSchema>;
+
+export type PracticeArea = typeof practiceAreas.$inferSelect;
+export type InsertPracticeArea = z.infer<typeof insertPracticeAreaSchema>;
+
 export type User = typeof users.$inferSelect;
+export type InsertUser = z.infer<typeof insertUserSchema>;
 
-export type InsertCase = z.infer<typeof insertCaseSchema>;
 export type Case = typeof cases.$inferSelect;
+export type InsertCase = z.infer<typeof insertCaseSchema>;
 
-export type InsertDocument = z.infer<typeof insertDocumentSchema>;
 export type Document = typeof documents.$inferSelect;
+export type InsertDocument = z.infer<typeof insertDocumentSchema>;
 
-export type InsertCaseAssignment = z.infer<typeof insertCaseAssignmentSchema>;
 export type CaseAssignment = typeof caseAssignments.$inferSelect;
+export type InsertCaseAssignment = z.infer<typeof insertCaseAssignmentSchema>;

@@ -11,71 +11,23 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import CaseCard from "./CaseCard";
 import { Plus, Search, Filter, LayoutGrid, List } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { type Case } from "@shared/schema";
 
 export default function CasesPage() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
-  const mockCases = [
-    {
-      caseNumber: "CFL-2024-0042",
-      title: "Merger and Acquisition Agreement for Tech Startup",
-      practiceArea: "Corporate & Commercial" as const,
-      status: "Active" as const,
-      assignedTo: [
-        { name: "Sarah Kimani", initials: "SK" },
-        { name: "Peter Ochieng", initials: "PO" },
-      ],
-      lastUpdated: "2 hours ago",
-    },
-    {
-      caseNumber: "CFL-2024-0038",
-      title: "Trademark Registration for Fashion Brand",
-      practiceArea: "Intellectual Property" as const,
-      status: "Under Review" as const,
-      assignedTo: [{ name: "Mary Wanjiru", initials: "MW" }],
-      lastUpdated: "1 day ago",
-    },
-    {
-      caseNumber: "CFL-2024-0035",
-      title: "Commercial Property Lease Agreement - Westlands",
-      practiceArea: "Real Estate" as const,
-      status: "Active" as const,
-      assignedTo: [
-        { name: "John Mwangi", initials: "JM" },
-        { name: "Alice Njeri", initials: "AN" },
-      ],
-      lastUpdated: "3 days ago",
-    },
-    {
-      caseNumber: "CFL-2024-0029",
-      title: "Loan Agreement Dispute Resolution",
-      practiceArea: "Banking & Finance" as const,
-      status: "Pending" as const,
-      assignedTo: [{ name: "Robert Kariuki", initials: "RK" }],
-      lastUpdated: "5 days ago",
-    },
-    {
-      caseNumber: "CFL-2024-0025",
-      title: "Debt Recovery Litigation",
-      practiceArea: "Dispute Resolution" as const,
-      status: "Active" as const,
-      assignedTo: [
-        { name: "Grace Muthoni", initials: "GM" },
-        { name: "James Kipchoge", initials: "JK" },
-      ],
-      lastUpdated: "1 week ago",
-    },
-    {
-      caseNumber: "CFL-2024-0018",
-      title: "Data Privacy Compliance Review",
-      practiceArea: "TMT" as const,
-      status: "Closed" as const,
-      assignedTo: [{ name: "Patricia Akinyi", initials: "PA" }],
-      lastUpdated: "2 weeks ago",
-    },
-  ];
+  const { data: cases = [], isLoading } = useQuery<Case[]>({
+    queryKey: ["/api/cases"],
+  });
+
+  const filteredCases = cases.filter(c => 
+    (statusFilter === "all" || c.status === statusFilter) &&
+    (c.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+     c.caseNumber.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
 
   return (
     <div className="space-y-6">
@@ -96,77 +48,55 @@ export default function CasesPage() {
         <div className="relative flex-1 min-w-64">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search cases by number, title, or client..."
+            placeholder="Search cases..."
             className="pl-9"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            data-testid="input-search-cases"
           />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-40" data-testid="select-status">
+          <SelectTrigger className="w-40">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Status</SelectItem>
             <SelectItem value="active">Active</SelectItem>
             <SelectItem value="pending">Pending</SelectItem>
-            <SelectItem value="review">Under Review</SelectItem>
+            <SelectItem value="under_review">Under Review</SelectItem>
             <SelectItem value="closed">Closed</SelectItem>
           </SelectContent>
         </Select>
-        <Button variant="outline" data-testid="button-filter">
-          <Filter className="h-4 w-4 mr-2" />
-          More Filters
-        </Button>
-        <div className="flex border rounded-md">
-          <Button
-            variant={viewMode === "grid" ? "secondary" : "ghost"}
-            size="icon"
-            className="rounded-r-none"
-            onClick={() => setViewMode("grid")}
-            data-testid="button-view-grid"
-          >
-            <LayoutGrid className="h-4 w-4" />
-          </Button>
-          <Button
-            variant={viewMode === "list" ? "secondary" : "ghost"}
-            size="icon"
-            className="rounded-l-none"
-            onClick={() => setViewMode("list")}
-            data-testid="button-view-list"
-          >
-            <List className="h-4 w-4" />
-          </Button>
-        </div>
       </div>
 
       <Tabs defaultValue="all" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="all" data-testid="tab-all">All Cases</TabsTrigger>
-          <TabsTrigger value="my" data-testid="tab-my">My Cases</TabsTrigger>
-          <TabsTrigger value="team" data-testid="tab-team">Team Cases</TabsTrigger>
+          <TabsTrigger value="all">All Cases</TabsTrigger>
+          <TabsTrigger value="my">My Cases</TabsTrigger>
         </TabsList>
-        <TabsContent value="all" className="space-y-4">
-          <div className={viewMode === "grid" ? "grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" : "space-y-4"}>
-            {mockCases.map((caseItem, index) => (
-              <CaseCard
-                key={index}
-                {...caseItem}
-                onClick={() => console.log("Case clicked:", caseItem.caseNumber)}
-              />
-            ))}
-          </div>
-        </TabsContent>
-        <TabsContent value="my">
-          <div className="text-center py-12 text-muted-foreground">
-            My assigned cases would appear here
-          </div>
-        </TabsContent>
-        <TabsContent value="team">
-          <div className="text-center py-12 text-muted-foreground">
-            Team cases would appear here
-          </div>
+        <TabsContent value="all">
+          {isLoading ? (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {[1,2,3,4].map(i => <div key={i} className="h-48 bg-muted animate-pulse rounded-lg" />)}
+            </div>
+          ) : filteredCases.length > 0 ? (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {filteredCases.map((caseItem) => (
+                <CaseCard
+                  key={caseItem.id}
+                  caseNumber={caseItem.caseNumber}
+                  title={caseItem.title}
+                  practiceArea={caseItem.practiceArea as any}
+                  status={caseItem.status as any}
+                  lastUpdated="Recently"
+                  assignedTo={[]}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-12 text-muted-foreground border rounded-lg border-dashed">
+              No cases found matching your criteria
+            </div>
+          )}
         </TabsContent>
       </Tabs>
     </div>
