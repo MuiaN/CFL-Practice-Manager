@@ -60,11 +60,14 @@ Preferred communication style: Simple, everyday language.
 - Tokens stored client-side in localStorage
 - Bearer token authentication via Authorization header
 - bcryptjs for password hashing with salt rounds
+- Modern split-screen login design with futuristic aesthetic
 
 **Authorization**:
 - Role-based access control (RBAC) with three roles: admin, senior_associate, associate
+- Ownership-based access control for cases (owners/admins only for updates)
+- Strict assignment-based access for non-admins to view cases and documents
 - Middleware-based authentication checks (`authenticateToken`)
-- Admin-only routes protected with `requireAdmin` middleware
+- Admin-only routes protected with `requireAdmin` middleware (user management, deletions)
 
 **File Uploads**: Multer middleware for handling document uploads with 10MB file size limit
 
