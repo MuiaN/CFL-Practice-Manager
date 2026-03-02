@@ -15,6 +15,7 @@ import { Link } from "wouter";
 export default function DashboardPage() {
   const { data: user } = useQuery<User>({ queryKey: ["/api/auth/me"] });
   const { data: cases = [] } = useQuery<Case[]>({ queryKey: ["/api/cases"] });
+  const { data: practiceAreas = [] } = useQuery<PracticeArea[]>({ queryKey: ["/api/practice-areas"] });
 
   const stats = [
     {
@@ -94,6 +95,7 @@ export default function DashboardPage() {
                 caseNumber={caseItem.caseNumber}
                 title={caseItem.title}
                 practiceArea={caseItem.practiceArea as any}
+                customPracticeAreaId={caseItem.customPracticeAreaId}
                 status={caseItem.status as any}
                 lastUpdated="Recently"
                 assignedTo={[]}

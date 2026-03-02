@@ -10,10 +10,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
+import { useQuery } from "@tanstack/react-query";
+import { type PracticeArea } from "@shared/schema";
+
 interface CaseCardProps {
   caseNumber: string;
   title: string;
   practiceArea: string;
+  customPracticeAreaId?: string | null;
   status: "active" | "pending" | "closed" | "under_review";
   assignedTo: Array<{ name: string; initials: string }>;
   lastUpdated: string;
@@ -31,11 +35,22 @@ export default function CaseCard({
   caseNumber,
   title,
   practiceArea,
+  customPracticeAreaId,
   status,
   assignedTo,
   lastUpdated,
   onClick,
 }: CaseCardProps) {
+  const { data: practiceAreas = [] } = useQuery<PracticeArea[]>({ queryKey: ["/api/practice-areas"] });
+
+  const getPracticeAreaDisplay = () => {
+    if (customPracticeAreaId) {
+      const pa = practiceAreas.find(p => p.id === customPracticeAreaId);
+      if (pa) return pa.name;
+    }
+    return practiceArea.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+  };
+
   const statusLabel = status.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
 
   return (
@@ -63,7 +78,7 @@ export default function CaseCard({
       <CardContent className="space-y-4 flex-1">
         <div className="flex flex-wrap gap-2">
           <Badge variant="outline" className="text-[10px] font-medium">
-            {practiceArea}
+            {getPracticeAreaDisplay()}
           </Badge>
           <Badge variant="outline" className={`text-[10px] font-medium border ${statusColors[status] || statusColors.pending}`}>
             {statusLabel}

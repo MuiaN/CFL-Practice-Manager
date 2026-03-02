@@ -54,6 +54,8 @@ export interface IStorage {
   createPracticeArea(pa: InsertPracticeArea): Promise<PracticeArea>;
   getPracticeAreas(): Promise<PracticeArea[]>;
   deletePracticeArea(id: string): Promise<boolean>;
+  updateRole(id: string, updates: Partial<InsertRole>): Promise<Role | undefined>;
+  updatePracticeArea(id: string, updates: Partial<InsertPracticeArea>): Promise<PracticeArea | undefined>;
 }
 
 export class DbStorage implements IStorage {
@@ -85,6 +87,15 @@ export class DbStorage implements IStorage {
     const [user] = await db
       .update(users)
       .set(updateData)
+      .where(eq(users.id, id))
+      .returning();
+    return user;
+  }
+
+  async deactivateUser(id: string): Promise<User | undefined> {
+    const [user] = await db
+      .update(users)
+      .set({ isActive: "false" })
       .where(eq(users.id, id))
       .returning();
     return user;
@@ -255,6 +266,16 @@ export class DbStorage implements IStorage {
   async deletePracticeArea(id: string): Promise<boolean> {
     const result = await db.delete(practiceAreas).where(eq(practiceAreas.id, id));
     return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  async updateRole(id: string, updates: Partial<InsertRole>): Promise<Role | undefined> {
+    const [role] = await db.update(roles).set(updates).where(eq(roles.id, id)).returning();
+    return role;
+  }
+
+  async updatePracticeArea(id: string, updates: Partial<InsertPracticeArea>): Promise<PracticeArea | undefined> {
+    const [pa] = await db.update(practiceAreas).set(updates).where(eq(practiceAreas.id, id)).returning();
+    return pa;
   }
 }
 

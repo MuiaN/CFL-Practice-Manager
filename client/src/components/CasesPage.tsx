@@ -23,6 +23,10 @@ export default function CasesPage() {
     queryKey: ["/api/cases"],
   });
 
+  const { data: practiceAreas = [] } = useQuery<PracticeArea[]>({
+    queryKey: ["/api/practice-areas"],
+  });
+
   const filteredCases = cases.filter(c => 
     (statusFilter === "all" || c.status === statusFilter) &&
     (c.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -86,6 +90,7 @@ export default function CasesPage() {
                   caseNumber={caseItem.caseNumber}
                   title={caseItem.title}
                   practiceArea={caseItem.practiceArea as any}
+                  customPracticeAreaId={caseItem.customPracticeAreaId}
                   status={caseItem.status as any}
                   lastUpdated="Recently"
                   assignedTo={[]}

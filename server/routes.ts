@@ -161,21 +161,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/users/:id", authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
+  app.patch("/api/users/:id/deactivate", authenticateToken, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
-      const deleted = await storage.deleteUser(id);
       
-      if (!deleted) {
+      // Allow admin to deactivate any user, or any user to deactivate themselves
+      if (req.userRole !== "admin" && req.userId !== id) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const user = await storage.updateUser(id, { isActive: "false" });
+      if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
 
-      res.status(204).send();
-    } catch (error: any) {
-      if (error.message?.includes("Cannot delete user")) {
-        return res.status(409).json({ message: error.message });
-      }
-      console.error("Delete user error:", error);
+      const { password: _, ...userWithoutPassword } = user;
+      res.json(userWithoutPassword);
+    } catch (error) {
+      console.error("Deactivate user error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.patch("/api/roles/:id", authenticateToken, requireAdmin, async (req, res) => {
+    try {
+      const role = await storage.updateRole(req.params.id, req.body);
+      res.json(role);
+    } catch (error) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.patch("/api/practice-areas/:id", authenticateToken, requireAdmin, async (req, res) => {
+    try {
+      const pa = await storage.updatePracticeArea(req.params.id, req.body);
+      res.json(pa);
+    } catch (error) {
       res.status(500).json({ message: "Internal server error" });
     }
   });

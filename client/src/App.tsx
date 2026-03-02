@@ -12,6 +12,8 @@ import DashboardPage from "@/components/DashboardPage";
 import CasesPage from "@/components/CasesPage";
 import DocumentsPage from "@/components/DocumentsPage";
 import AdminUsersPage from "@/components/AdminUsersPage";
+import RoleManagementPage from "@/components/RoleManagementPage";
+import PracticeAreaManagementPage from "@/components/PracticeAreaManagementPage";
 import ThemeToggle from "@/components/ThemeToggle";
 import NotFound from "@/pages/not-found";
 import { getCurrentUser, getToken, type AuthUser } from "@/lib/auth";
@@ -38,6 +40,8 @@ function AuthenticatedLayout({ user }: { user: AuthUser }) {
               <Route path="/cases" component={CasesPage} />
               <Route path="/documents" component={DocumentsPage} />
               <Route path="/admin/users" component={AdminUsersPage} />
+              <Route path="/admin/roles" component={RoleManagementPage} />
+              <Route path="/admin/practice-areas" component={PracticeAreaManagementPage} />
               <Route component={NotFound} />
             </Switch>
           </main>

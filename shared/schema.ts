@@ -18,6 +18,7 @@ export const roles = pgTable("roles", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull().unique(),
   description: text("description"),
+  permissions: text("permissions").array().default(sql`ARRAY[]::text[]`), // e.g. ["cases", "documents", "admin"]
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -25,6 +26,7 @@ export const practiceAreas = pgTable("practice_areas", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull().unique(),
   description: text("description"),
+  dashboardConfig: text("dashboard_config"), // JSON string or comma-separated list of widgets
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

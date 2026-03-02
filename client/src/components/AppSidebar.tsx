@@ -18,6 +18,9 @@ import {
   Settings,
   Scale,
   LogOut,
+  ShieldCheck,
+  FolderKanban,
+  UserX,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -30,6 +33,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { logout, type AuthUser } from "@/lib/auth";
 import { Link, useLocation } from "wouter";
+import { apiRequest } from "@/lib/queryClient";
 
 interface AppSidebarProps {
   user: AuthUser;
@@ -58,9 +62,19 @@ export default function AppSidebar({ user }: AppSidebarProps) {
 
   const adminItems = [
     {
-      title: "User Management",
+      title: "Staff Management",
       url: "/admin/users",
       icon: Users,
+    },
+    {
+      title: "Roles & Permissions",
+      url: "/admin/roles",
+      icon: ShieldCheck,
+    },
+    {
+      title: "Practice Areas",
+      url: "/admin/practice-areas",
+      icon: FolderKanban,
     },
   ];
 
@@ -159,6 +173,18 @@ export default function AppSidebar({ user }: AppSidebarProps) {
               Preferences
             </DropdownMenuItem>
             <DropdownMenuSeparator />
+            <DropdownMenuItem 
+              className="text-destructive"
+              onClick={async () => {
+                if (confirm("Are you sure you want to deactivate your account? You will be logged out immediately.")) {
+                  await apiRequest("PATCH", `/api/users/${user.id}/deactivate`);
+                  logout();
+                }
+              }}
+            >
+              <UserX className="h-4 w-4 mr-2" />
+              Deactivate Account
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={logout} data-testid="menu-logout">
               <LogOut className="h-4 w-4 mr-2" />
               Sign out
