@@ -1,17 +1,55 @@
-import { useParams } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useParams, useLocation } from "wouter";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { type Case, type Document, type User, type PracticeArea } from "@shared/schema";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { FileText, Users, Clock, Briefcase } from "lucide-react";
+import { FileText, Users, Clock, Briefcase, Edit2, Check, X } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 export default function CaseDetailsPage() {
   const { id } = useParams<{ id: string }>();
+  const [location] = useLocation();
+  const { toast } = useToast();
+  
+  const queryParams = new URLSearchParams(location.split('?')[1]);
+  const initialEditMode = queryParams.get('edit') === 'true';
+  const initialTab = queryParams.get('tab') || 'documents';
+  
+  const [isEditing, setIsEditing] = useState(initialEditMode);
+  const [activeTab, setActiveTab] = useState(initialTab);
   
   const { data: caseItem, isLoading: isLoadingCase } = useQuery<Case>({
     queryKey: [`/api/cases/${id}`],
+  });
+
+  const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editStatus, setEditStatus] = useState("");
+
+  useEffect(() => {
+    if (caseItem) {
+      setEditTitle(caseItem.title);
+      setEditDescription(caseItem.description || "");
+      setEditStatus(caseItem.status);
+    }
+  }, [caseItem]);
+
+  const updateCaseMutation = useMutation({
+    mutationFn: async (data: any) => apiRequest("PATCH", `/api/cases/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/cases/${id}`] });
+      setIsEditing(false);
+      toast({ title: "Case updated successfully" });
+    }
   });
 
   const { data: documents = [] } = useQuery<Document[]>({
@@ -34,6 +72,14 @@ export default function CaseDetailsPage() {
     return <div className="p-8 text-center text-destructive">Case not found</div>;
   }
 
+  const handleSave = () => {
+    updateCaseMutation.mutate({
+      title: editTitle,
+      description: editDescription,
+      status: editStatus,
+    });
+  };
+
   const getPracticeAreaDisplay = () => {
     if (caseItem.customPracticeAreaId) {
       const pa = practiceAreas.find(p => p.id === caseItem.customPracticeAreaId);
@@ -52,15 +98,57 @@ export default function CaseDetailsPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
+        <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">
             <span className="font-mono text-sm text-muted-foreground uppercase tracking-wider">{caseItem.caseNumber}</span>
-            <Badge variant="outline" className={statusColors[caseItem.status]}>
-              {caseItem.status.replace("_", " ")}
-            </Badge>
+            {!isEditing && (
+              <Badge variant="outline" className={statusColors[caseItem.status]}>
+                {caseItem.status.replace("_", " ")}
+              </Badge>
+            )}
           </div>
-          <h1 className="text-3xl font-bold tracking-tight">{caseItem.title}</h1>
-          <p className="text-muted-foreground mt-1">{getPracticeAreaDisplay()}</p>
+          {isEditing ? (
+            <div className="space-y-4 max-w-2xl mt-4">
+              <div className="space-y-2">
+                <Label>Case Title</Label>
+                <Input value={editTitle} onChange={e => setEditTitle(e.target.value)} className="text-xl font-bold" />
+              </div>
+              <div className="flex gap-4">
+                <div className="space-y-2 flex-1">
+                  <Label>Status</Label>
+                  <Select value={editStatus} onValueChange={setEditStatus}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="under_review">Under Review</SelectItem>
+                      <SelectItem value="closed">Closed</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-end gap-2">
+                  <Button onClick={handleSave} disabled={updateCaseMutation.isPending}>
+                    <Check className="h-4 w-4 mr-2" /> Save
+                  </Button>
+                  <Button variant="outline" onClick={() => setIsEditing(false)}>
+                    <X className="h-4 w-4 mr-2" /> Cancel
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-start justify-between">
+              <div>
+                <h1 className="text-3xl font-bold tracking-tight">{caseItem.title}</h1>
+                <p className="text-muted-foreground mt-1">{getPracticeAreaDisplay()}</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
+                <Edit2 className="h-4 w-4 mr-2" /> Edit Case
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -74,13 +162,22 @@ export default function CaseDetailsPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                {caseItem.description || "No description provided for this case."}
-              </p>
+              {isEditing ? (
+                <Textarea 
+                  value={editDescription} 
+                  onChange={e => setEditDescription(e.target.value)} 
+                  className="min-h-[150px] resize-none"
+                  placeholder="Enter case description..."
+                />
+              ) : (
+                <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                  {caseItem.description || "No description provided for this case."}
+                </p>
+              )}
             </CardContent>
           </Card>
 
-          <Tabs defaultValue="documents" className="w-full">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="documents" className="flex items-center gap-2">
                 <FileText className="h-4 w-4" />
@@ -93,7 +190,11 @@ export default function CaseDetailsPage() {
             </TabsList>
             <TabsContent value="documents" className="pt-4">
               <Card>
-                <CardContent className="p-0">
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <CardTitle className="text-base">Case Files</CardTitle>
+                  <Button size="sm"><FileText className="h-4 w-4 mr-2" /> Upload File</Button>
+                </CardHeader>
+                <CardContent className="p-0 border-t">
                   {documents.length > 0 ? (
                     <div className="divide-y">
                       {documents.map((doc) => (

@@ -82,8 +82,8 @@ export default function CaseCard({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setLocation(`/cases/${id}`); }}>View Details</DropdownMenuItem>
-            <DropdownMenuItem onClick={(e) => e.stopPropagation()}>Edit Case</DropdownMenuItem>
-            <DropdownMenuItem onClick={(e) => e.stopPropagation()}>Manage Files</DropdownMenuItem>
+            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setLocation(`/cases/${id}?edit=true`); }}>Edit Case</DropdownMenuItem>
+            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setLocation(`/cases/${id}?tab=documents`); }}>Manage Files</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </CardHeader>
