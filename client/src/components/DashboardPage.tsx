@@ -92,6 +92,7 @@ export default function DashboardPage() {
             {cases.slice(0, 4).map((caseItem) => (
               <CaseCard
                 key={caseItem.id}
+                id={caseItem.id}
                 caseNumber={caseItem.caseNumber}
                 title={caseItem.title}
                 practiceArea={caseItem.practiceArea as any}

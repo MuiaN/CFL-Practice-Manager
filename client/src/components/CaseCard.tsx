@@ -12,8 +12,10 @@ import {
 
 import { useQuery } from "@tanstack/react-query";
 import { type PracticeArea } from "@shared/schema";
+import { useLocation } from "wouter";
 
 interface CaseCardProps {
+  id: string;
   caseNumber: string;
   title: string;
   practiceArea: string;
@@ -32,6 +34,7 @@ const statusColors: Record<string, string> = {
 };
 
 export default function CaseCard({
+  id,
   caseNumber,
   title,
   practiceArea,
@@ -41,7 +44,16 @@ export default function CaseCard({
   lastUpdated,
   onClick,
 }: CaseCardProps) {
+  const [, setLocation] = useLocation();
   const { data: practiceAreas = [] } = useQuery<PracticeArea[]>({ queryKey: ["/api/practice-areas"] });
+
+  const handleCardClick = () => {
+    if (onClick) {
+      onClick();
+    } else {
+      setLocation(`/cases/${id}`);
+    }
+  };
 
   const getPracticeAreaDisplay = () => {
     if (customPracticeAreaId) {
@@ -54,7 +66,7 @@ export default function CaseCard({
   const statusLabel = status.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
 
   return (
-    <Card className="hover-elevate cursor-pointer h-full flex flex-col" onClick={onClick} data-testid={`card-case-${caseNumber}`}>
+    <Card className="hover-elevate cursor-pointer h-full flex flex-col" onClick={handleCardClick} data-testid={`card-case-${caseNumber}`}>
       <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0 pb-2">
         <div className="flex-1 min-w-0">
           <p className="font-mono text-xs text-muted-foreground mb-1 uppercase tracking-wider">
@@ -69,9 +81,9 @@ export default function CaseCard({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem>View Details</DropdownMenuItem>
-            <DropdownMenuItem>Edit Case</DropdownMenuItem>
-            <DropdownMenuItem>Manage Files</DropdownMenuItem>
+            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setLocation(`/cases/${id}`); }}>View Details</DropdownMenuItem>
+            <DropdownMenuItem onClick={(e) => e.stopPropagation()}>Edit Case</DropdownMenuItem>
+            <DropdownMenuItem onClick={(e) => e.stopPropagation()}>Manage Files</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </CardHeader>
