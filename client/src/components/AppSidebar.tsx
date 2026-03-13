@@ -37,9 +37,10 @@ import { apiRequest } from "@/lib/queryClient";
 
 interface AppSidebarProps {
   user: AuthUser;
+  onLogout?: () => void;
 }
 
-export default function AppSidebar({ user }: AppSidebarProps) {
+export default function AppSidebar({ user, onLogout }: AppSidebarProps) {
   const [location] = useLocation();
 
   const mainItems = [
@@ -185,7 +186,7 @@ export default function AppSidebar({ user }: AppSidebarProps) {
               <UserX className="h-4 w-4 mr-2" />
               Deactivate Account
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={logout} data-testid="menu-logout">
+            <DropdownMenuItem onClick={onLogout ?? logout} data-testid="menu-logout">
               <LogOut className="h-4 w-4 mr-2" />
               Sign out
             </DropdownMenuItem>

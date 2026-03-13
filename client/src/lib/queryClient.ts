@@ -1,7 +1,16 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
+function handleAuthError() {
+  localStorage.removeItem("auth_token");
+  window.location.href = "/";
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
+    if (res.status === 401 || res.status === 403) {
+      handleAuthError();
+      throw new Error("Session expired. Please log in again.");
+    }
     const text = (await res.text()) || res.statusText;
     throw new Error(`${res.status}: ${text}`);
   }
@@ -54,13 +63,17 @@ export const getQueryFn: <T>(options: {
       headers["Authorization"] = `Bearer ${token}`;
     }
 
-    const res = await fetch(queryKey.join("/") as string, {
+    const res = await fetch(queryKey[0] as string, {
       headers,
       credentials: "include",
     });
 
-    if (unauthorizedBehavior === "returnNull" && res.status === 401) {
-      return null;
+    if (res.status === 401 || res.status === 403) {
+      if (unauthorizedBehavior === "returnNull") {
+        return null;
+      }
+      handleAuthError();
+      throw new Error("Session expired. Please log in again.");
     }
 
     await throwIfResNotOk(res);

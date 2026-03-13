@@ -19,7 +19,7 @@ import ThemeToggle from "@/components/ThemeToggle";
 import NotFound from "@/pages/not-found";
 import { getCurrentUser, getToken, type AuthUser } from "@/lib/auth";
 
-function AuthenticatedLayout({ user }: { user: AuthUser }) {
+function AuthenticatedLayout({ user, onLogout }: { user: AuthUser; onLogout: () => void }) {
   const style = {
     "--sidebar-width": "20rem",
     "--sidebar-width-icon": "4rem",
@@ -28,7 +28,7 @@ function AuthenticatedLayout({ user }: { user: AuthUser }) {
   return (
     <SidebarProvider style={style as React.CSSProperties}>
       <div className="flex h-screen w-full">
-        <AppSidebar user={user} />
+        <AppSidebar user={user} onLogout={onLogout} />
         <div className="flex flex-col flex-1 overflow-hidden">
           <header className="flex items-center justify-between h-16 px-6 border-b bg-background">
             <SidebarTrigger data-testid="button-sidebar-toggle" />
@@ -57,9 +57,10 @@ function AppContent() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
-  const { data: user, isLoading } = useQuery<AuthUser>({
+  const { data: user, isLoading, isError } = useQuery<AuthUser>({
     queryKey: ["/api/auth/me"],
     enabled: isAuthenticated,
+    retry: false,
   });
 
   useEffect(() => {
@@ -70,8 +71,23 @@ function AppContent() {
     setIsCheckingAuth(false);
   }, []);
 
+  // If token is invalid/expired, clear it and force re-login
+  useEffect(() => {
+    if (isError) {
+      localStorage.removeItem("auth_token");
+      setIsAuthenticated(false);
+    }
+  }, [isError]);
+
   const handleLoginSuccess = () => {
     setIsAuthenticated(true);
+    queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("auth_token");
+    queryClient.clear();
+    setIsAuthenticated(false);
   };
 
   if (isCheckingAuth || (isAuthenticated && isLoading)) {
@@ -85,19 +101,22 @@ function AppContent() {
     );
   }
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated || isError) {
     return <LoginPage onLoginSuccess={handleLoginSuccess} />;
   }
 
   if (!user) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <p className="text-muted-foreground">Unable to load user data</p>
+        <div className="text-center">
+          <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
       </div>
     );
   }
 
-  return <AuthenticatedLayout user={user} />;
+  return <AuthenticatedLayout user={user} onLogout={handleLogout} />;
 }
 
 function App() {
