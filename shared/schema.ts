@@ -72,6 +72,8 @@ export const documents = pgTable("documents", {
   uploadedById: varchar("uploaded_by_id").notNull().references(() => users.id),
   version: text("version").notNull().default("1"),
   filePath: text("file_path").notNull(),
+  parentDocumentId: varchar("parent_document_id"),
+  changeNote: text("change_note"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
