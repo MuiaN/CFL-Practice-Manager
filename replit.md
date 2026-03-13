@@ -1,8 +1,27 @@
-# CFL Legal Practice Management System
+# Legal Practice Management System (LPMS)
 
 ## Overview
 
-CFL Legal is a professional legal practice management system designed for a law firm in Kilimani, Nairobi. The application manages cases, documents, team collaboration, and user administration with role-based access control. Built with a modern TypeScript stack, it provides a data-dense interface optimized for legal professionals to efficiently track case information, manage documentation, and coordinate team assignments.
+A white-label professional legal practice management system that can be deployed for any law firm. The application manages cases, documents, team collaboration, and user administration with role-based access control.
+
+## White-Label Configuration
+
+To deploy this system for a different law firm, edit **one file only**:
+
+```
+shared/firmConfig.ts
+```
+
+That file controls every place in the UI that displays the firm's identity:
+- Firm name and short name
+- Office location
+- Email domain (used in input placeholders)
+- Login page tagline and description
+- Browser tab title
+
+No other file needs to be changed for basic white-labelling. After editing `shared/firmConfig.ts`, restart the server and the changes will appear throughout the application.
+
+Built with a modern TypeScript stack, it provides a data-dense interface optimized for legal professionals to efficiently track case information, manage documentation, and coordinate team assignments.
 
 ## User Preferences
 

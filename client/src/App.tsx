@@ -18,6 +18,7 @@ import CaseDetailsPage from "@/components/CaseDetailsPage";
 import ThemeToggle from "@/components/ThemeToggle";
 import NotFound from "@/pages/not-found";
 import { getCurrentUser, getToken, type AuthUser } from "@/lib/auth";
+import firmConfig from "@/lib/firmConfig";
 
 function AuthenticatedLayout({ user, onLogout }: { user: AuthUser; onLogout: () => void }) {
   const style = {
@@ -55,6 +56,11 @@ function AuthenticatedLayout({ user, onLogout }: { user: AuthUser; onLogout: () 
 
 function AppContent() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  // Set browser tab title from firm config
+  useEffect(() => {
+    document.title = `${firmConfig.name} - ${firmConfig.systemTitle}`;
+  }, []);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
   const { data: user, isLoading, isError } = useQuery<AuthUser>({

@@ -7,6 +7,7 @@ import { Scale } from "lucide-react";
 import heroImage from "@assets/generated_images/Professional_law_office_Nairobi_6eaeab6d.png";
 import { login } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
+import firmConfig from "@/lib/firmConfig";
 
 interface LoginPageProps {
   onLoginSuccess: () => void;
@@ -27,7 +28,7 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
       await login(email, password);
       toast({
         title: "Login successful",
-        description: "Welcome to CFL Legal Practice Management System",
+        description: `Welcome to ${firmConfig.name} ${firmConfig.systemTitle}`,
       });
       onLoginSuccess();
     } catch (error) {
@@ -64,19 +65,18 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
               </div>
               <div>
                 <h1 className="text-5xl font-bold bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent">
-                  CFL Legal
+                  {firmConfig.name}
                 </h1>
-                <p className="text-sm text-blue-200/80 mt-1">Kilimani, Nairobi</p>
+                <p className="text-sm text-blue-200/80 mt-1">{firmConfig.location}</p>
               </div>
             </div>
             
             <div className="space-y-4">
               <p className="text-2xl font-semibold text-white/90 leading-relaxed">
-                Excellence in Legal Practice
+                {firmConfig.tagline}
               </p>
               <p className="text-base text-blue-100/70 max-w-lg leading-relaxed">
-                Comprehensive solutions for Corporate, Intellectual Property, 
-                Real Estate, Banking & Finance, and Dispute Resolution.
+                {firmConfig.description}
               </p>
             </div>
 
@@ -98,8 +98,8 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
               <Scale className="h-6 w-6 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-white">CFL Legal</h1>
-              <p className="text-sm text-blue-200/60">Kilimani, Nairobi</p>
+              <h1 className="text-2xl font-bold text-white">{firmConfig.name}</h1>
+              <p className="text-sm text-blue-200/60">{firmConfig.location}</p>
             </div>
           </div>
 
@@ -117,7 +117,7 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
                 <Input
                   id="email"
                   type="email"
-                  placeholder="your.email@cfllegal.co.ke"
+                  placeholder={`your.email@${firmConfig.emailDomain}`}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -185,7 +185,7 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
               <p className="text-sm text-blue-200/60">Demo credentials</p>
               <div className="bg-white/5 border border-white/10 rounded-lg p-3">
                 <p className="font-mono text-xs text-blue-100">
-                  admin@cfllegal.co.ke
+                  admin@{firmConfig.emailDomain}
                 </p>
                 <p className="font-mono text-xs text-blue-100 mt-1">
                   admin123

@@ -39,6 +39,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { type User, type Role, type PracticeArea } from "@shared/schema";
+import firmConfig from "@/lib/firmConfig";
 
 export default function AdminUsersPage() {
   const { toast } = useToast();
@@ -165,7 +166,7 @@ export default function AdminUsersPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>Email</Label>
-                  <Input type="email" value={newUserEmail} onChange={e => setNewUserEmail(e.target.value)} placeholder="john@cfllegal.co.ke" />
+                  <Input type="email" value={newUserEmail} onChange={e => setNewUserEmail(e.target.value)} placeholder={`john@${firmConfig.emailDomain}`} />
                 </div>
                 <div className="space-y-2">
                   <Label>Default Password</Label>

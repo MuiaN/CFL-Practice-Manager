@@ -34,6 +34,7 @@ import {
 import { logout, type AuthUser } from "@/lib/auth";
 import { Link, useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
+import firmConfig from "@/lib/firmConfig";
 
 interface AppSidebarProps {
   user: AuthUser;
@@ -102,8 +103,8 @@ export default function AppSidebar({ user, onLogout }: AppSidebarProps) {
         <div className="flex items-center gap-2">
           <Scale className="h-6 w-6 text-primary" />
           <div>
-            <h2 className="font-semibold text-base">CFL Legal</h2>
-            <p className="text-xs text-muted-foreground">Kilimani, Nairobi</p>
+            <h2 className="font-semibold text-base">{firmConfig.name}</h2>
+            <p className="text-xs text-muted-foreground">{firmConfig.location}</p>
           </div>
         </div>
       </SidebarHeader>
