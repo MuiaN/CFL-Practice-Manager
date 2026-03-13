@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Table,
   TableBody,
@@ -14,7 +14,6 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -28,7 +27,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, MoreVertical, Shield, Briefcase, UserX, Edit2 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Plus, MoreVertical, UserX, Edit2, ShieldCheck } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -51,51 +51,65 @@ export default function AdminUsersPage() {
   const [newUserName, setNewUserName] = useState("");
   const [newUserEmail, setNewUserEmail] = useState("");
   const [newUserPassword, setNewUserPassword] = useState("password123");
-  const [newUserRole, setNewUserRole] = useState("associate");
+  const [newUserIsAdmin, setNewUserIsAdmin] = useState(false);
   const [newUserCustomRole, setNewUserCustomRole] = useState("");
-
-  const [newUserPracticeAreas, setNewUserPracticeAreas] = useState<string[]>([]);
   const [newUserCustomPracticeAreas, setNewUserCustomPracticeAreas] = useState<string[]>([]);
 
   const { data: users = [] } = useQuery<User[]>({ queryKey: ["/api/users"] });
   const { data: roles = [] } = useQuery<Role[]>({ queryKey: ["/api/roles"] });
   const { data: practiceAreas = [] } = useQuery<PracticeArea[]>({ queryKey: ["/api/practice-areas"] });
-  const { data: currentUser } = useQuery<User>({ queryKey: ["/api/auth/me"] });
 
   const createUserMutation = useMutation({
     mutationFn: async (data: any) => apiRequest("POST", "/api/users", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
       setIsCreateUserOpen(false);
-      toast({ title: "User created successfully" });
-    }
+      resetForm();
+      toast({ title: "Staff member created successfully" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Failed to create staff member", description: err.message, variant: "destructive" });
+    },
   });
 
   const updateUserMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string, data: any }) => apiRequest("PATCH", `/api/users/${id}`, data),
+    mutationFn: async ({ id, data }: { id: string; data: any }) =>
+      apiRequest("PATCH", `/api/users/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
       setEditingUser(null);
-      toast({ title: "User updated successfully" });
-    }
+      toast({ title: "Staff member updated successfully" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Failed to update staff member", description: err.message, variant: "destructive" });
+    },
   });
 
   const deactivateUserMutation = useMutation({
     mutationFn: async (id: string) => apiRequest("PATCH", `/api/users/${id}/deactivate`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
-      toast({ title: "User deactivated successfully" });
-    }
+      toast({ title: "Staff member deactivated" });
+    },
   });
+
+  const resetForm = () => {
+    setNewUserName("");
+    setNewUserEmail("");
+    setNewUserPassword("password123");
+    setNewUserIsAdmin(false);
+    setNewUserCustomRole("");
+    setNewUserCustomPracticeAreas([]);
+  };
 
   const handleCreateUser = () => {
     createUserMutation.mutate({
       name: newUserName,
       email: newUserEmail,
       password: newUserPassword,
-      role: newUserRole,
+      role: newUserIsAdmin ? "admin" : "associate",
       customRoleId: newUserCustomRole || null,
-      practiceAreas: newUserPracticeAreas,
+      practiceAreas: [],
       customPracticeAreaIds: newUserCustomPracticeAreas,
     });
   };
@@ -107,11 +121,11 @@ export default function AdminUsersPage() {
       data: {
         name: newUserName,
         email: newUserEmail,
-        role: newUserRole,
+        role: newUserIsAdmin ? "admin" : "associate",
         customRoleId: newUserCustomRole || null,
-        practiceAreas: newUserPracticeAreas,
+        practiceAreas: [],
         customPracticeAreaIds: newUserCustomPracticeAreas,
-      }
+      },
     });
   };
 
@@ -119,36 +133,162 @@ export default function AdminUsersPage() {
     if (editingUser) {
       setNewUserName(editingUser.name);
       setNewUserEmail(editingUser.email);
-      setNewUserRole(editingUser.role);
+      setNewUserIsAdmin(editingUser.role === "admin");
       setNewUserCustomRole(editingUser.customRoleId || "");
-      setNewUserPracticeAreas(editingUser.practiceAreas || []);
       setNewUserCustomPracticeAreas(editingUser.customPracticeAreaIds || []);
     } else {
-      setNewUserName("");
-      setNewUserEmail("");
-      setNewUserRole("associate");
-      setNewUserCustomRole("");
-      setNewUserPracticeAreas([]);
-      setNewUserCustomPracticeAreas([]);
+      resetForm();
     }
   }, [editingUser]);
 
-  const filteredUsers = users.filter(u => 
-    u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    u.email.toLowerCase().includes(searchQuery.toLowerCase())
+  const togglePracticeArea = (id: string) => {
+    setNewUserCustomPracticeAreas(prev =>
+      prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
+    );
+  };
+
+  const filteredUsers = users.filter(
+    u =>
+      u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      u.email.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const getRoleName = (user: User) => {
+    if (user.customRoleId) {
+      const r = roles.find(r => r.id === user.customRoleId);
+      if (r) return r.name;
+    }
+    if (user.role === "admin") return "Administrator";
+    return null;
+  };
+
+  const UserForm = ({ isEdit }: { isEdit?: boolean }) => (
+    <div className="space-y-5 py-4">
+      <div className="space-y-2">
+        <Label>Full Name</Label>
+        <Input
+          value={newUserName}
+          onChange={e => setNewUserName(e.target.value)}
+          placeholder="Jane Mwangi"
+          data-testid="input-user-name"
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label>Email Address</Label>
+        <Input
+          type="email"
+          value={newUserEmail}
+          onChange={e => setNewUserEmail(e.target.value)}
+          placeholder={`jane@${firmConfig.emailDomain}`}
+          data-testid="input-user-email"
+        />
+      </div>
+
+      {!isEdit && (
+        <div className="space-y-2">
+          <Label>Default Password</Label>
+          <Input
+            type="text"
+            value={newUserPassword}
+            onChange={e => setNewUserPassword(e.target.value)}
+            data-testid="input-user-password"
+          />
+        </div>
+      )}
+
+      <div className="space-y-2">
+        <Label>Role</Label>
+        {roles.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-1">
+            No roles created yet. Add roles in the Roles section first.
+          </p>
+        ) : (
+          <Select value={newUserCustomRole} onValueChange={setNewUserCustomRole}>
+            <SelectTrigger data-testid="select-user-role">
+              <SelectValue placeholder="Select a role" />
+            </SelectTrigger>
+            <SelectContent>
+              {roles.map(r => (
+                <SelectItem key={r.id} value={r.id}>
+                  {r.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <Label>Practice Areas</Label>
+        {practiceAreas.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-1">
+            No practice areas created yet. Add them in the Practice Areas section first.
+          </p>
+        ) : (
+          <div className="flex flex-wrap gap-2 p-3 border rounded-md min-h-12">
+            {practiceAreas.map(pa => (
+              <Badge
+                key={pa.id}
+                variant={newUserCustomPracticeAreas.includes(pa.id) ? "default" : "outline"}
+                className="cursor-pointer"
+                onClick={() => togglePracticeArea(pa.id)}
+                data-testid={`badge-practice-area-${pa.id}`}
+              >
+                {pa.name}
+              </Badge>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between rounded-md border p-3">
+        <div className="space-y-0.5">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+            Administrator access
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Grants full access to manage staff, cases, and system settings.
+          </p>
+        </div>
+        <Switch
+          checked={newUserIsAdmin}
+          onCheckedChange={setNewUserIsAdmin}
+          data-testid="switch-admin-access"
+        />
+      </div>
+    </div>
   );
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Staff Management</h1>
           <p className="text-muted-foreground mt-1">
             Manage law firm staff, accounts, and system access
           </p>
         </div>
-        <div className="flex gap-2">
-          <Dialog open={isCreateUserOpen} onOpenChange={setIsCreateUserOpen}>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="relative">
+            <Input
+              placeholder="Search staff..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="w-56 pl-3"
+              data-testid="input-search-users"
+            />
+          </div>
+
+          <Dialog
+            open={isCreateUserOpen}
+            onOpenChange={open => {
+              setIsCreateUserOpen(open);
+              if (!open) resetForm();
+            }}
+          >
             <DialogTrigger asChild>
               <Button data-testid="button-create-user">
                 <Plus className="h-4 w-4 mr-2" />
@@ -157,82 +297,17 @@ export default function AdminUsersPage() {
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Create New User</DialogTitle>
+                <DialogTitle>Add Staff Member</DialogTitle>
               </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label>Full Name</Label>
-                  <Input value={newUserName} onChange={e => setNewUserName(e.target.value)} placeholder="John Doe" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Email</Label>
-                  <Input type="email" value={newUserEmail} onChange={e => setNewUserEmail(e.target.value)} placeholder={`john@${firmConfig.emailDomain}`} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Default Password</Label>
-                  <Input type="text" value={newUserPassword} onChange={e => setNewUserPassword(e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label>System Role</Label>
-                  <Select value={newUserRole} onValueChange={setNewUserRole}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="admin">Admin</SelectItem>
-                      <SelectItem value="senior_associate">Senior Associate</SelectItem>
-                      <SelectItem value="associate">Associate</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Organization Role</Label>
-                  <Select value={newUserCustomRole} onValueChange={setNewUserCustomRole}>
-                    <SelectTrigger><SelectValue placeholder="Select role" /></SelectTrigger>
-                    <SelectContent>
-                      {roles.map(r => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Practice Areas (System)</Label>
-                  <div className="flex flex-wrap gap-2 p-2 border rounded-md min-h-10">
-                    {["corporate_commercial", "intellectual_property", "real_estate", "banking_finance", "dispute_resolution", "tmt"].map(pa => (
-                      <Badge 
-                        key={pa} 
-                        variant={newUserPracticeAreas.includes(pa) ? "default" : "outline"}
-                        className="cursor-pointer"
-                        onClick={() => {
-                          setNewUserPracticeAreas(prev => 
-                            prev.includes(pa) ? prev.filter(p => p !== pa) : [...prev, pa]
-                          );
-                        }}
-                      >
-                        {pa.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>Custom Practice Areas</Label>
-                  <div className="flex flex-wrap gap-2 p-2 border rounded-md min-h-10">
-                    {practiceAreas.map(pa => (
-                      <Badge 
-                        key={pa.id} 
-                        variant={newUserCustomPracticeAreas.includes(pa.id) ? "default" : "outline"}
-                        className="cursor-pointer"
-                        onClick={() => {
-                          setNewUserCustomPracticeAreas(prev => 
-                            prev.includes(pa.id) ? prev.filter(p => p !== pa.id) : [...prev, pa.id]
-                          );
-                        }}
-                      >
-                        {pa.name}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              </div>
+              <UserForm />
               <DialogFooter>
-                <Button onClick={handleCreateUser} disabled={createUserMutation.isPending}>Create User</Button>
+                <Button
+                  onClick={handleCreateUser}
+                  disabled={createUserMutation.isPending || !newUserName || !newUserEmail}
+                  data-testid="button-confirm-create-user"
+                >
+                  {createUserMutation.isPending ? "Creating..." : "Create Staff Member"}
+                </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -243,143 +318,132 @@ export default function AdminUsersPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>User</TableHead>
+              <TableHead>Name</TableHead>
               <TableHead>Email</TableHead>
-              <TableHead>System Role</TableHead>
+              <TableHead>Role</TableHead>
               <TableHead>Practice Areas</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="w-12"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredUsers.map((user) => (
-              <TableRow key={user.id} className={user.isActive === "false" ? "opacity-50" : ""}>
-                <TableCell>
-                  <div className="flex items-center gap-3">
-                    <Avatar className="h-8 w-8">
-                      <AvatarFallback>{user.name.split(" ").map(n => n[0]).join("")}</AvatarFallback>
-                    </Avatar>
-                    <span className="font-medium">{user.name}</span>
-                  </div>
-                </TableCell>
-                <TableCell className="text-muted-foreground">{user.email}</TableCell>
-                <TableCell><Badge variant="secondary">{user.role}</Badge></TableCell>
-                <TableCell>
-                  <div className="flex flex-wrap gap-1">
-                    {user.practiceAreas?.map((pa, i) => (
-                      <Badge key={i} variant="outline" className="text-[10px]">{pa.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")}</Badge>
-                    ))}
-                    {user.customPracticeAreaIds?.map((id, i) => {
-                      const pa = practiceAreas.find(p => p.id === id);
-                      return pa ? <Badge key={`custom-${i}`} variant="default" className="text-[10px] bg-primary/10 text-primary border-primary/20">{pa.name}</Badge> : null;
-                    })}
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <Badge variant="outline" className={user.isActive === "true" ? "bg-status-online/10 text-status-online" : "bg-status-busy/10 text-status-busy"}>
-                    {user.isActive === "true" ? "Active" : "Inactive"}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => setEditingUser(user)}>
-                        <Edit2 className="h-4 w-4 mr-2" /> Edit
-                      </DropdownMenuItem>
-                      <DropdownMenuItem 
-                        className="text-destructive" 
-                        onClick={() => deactivateUserMutation.mutate(user.id)}
-                        disabled={deactivateUserMutation.isPending}
-                      >
-                        <UserX className="h-4 w-4 mr-2" /> Deactivate
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+            {filteredUsers.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center py-10 text-muted-foreground">
+                  {searchQuery ? "No staff members match your search." : "No staff members yet."}
                 </TableCell>
               </TableRow>
-            ))}
+            )}
+            {filteredUsers.map(user => {
+              const roleName = getRoleName(user);
+              const userPAs = practiceAreas.filter(pa =>
+                user.customPracticeAreaIds?.includes(pa.id)
+              );
+
+              return (
+                <TableRow
+                  key={user.id}
+                  className={user.isActive === "false" ? "opacity-50" : ""}
+                  data-testid={`row-user-${user.id}`}
+                >
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-8 w-8">
+                        <AvatarFallback className="text-xs">
+                          {user.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <span className="font-medium">{user.name}</span>
+                        {user.role === "admin" && (
+                          <span className="ml-2 inline-flex items-center gap-1 text-[10px] text-primary font-medium">
+                            <ShieldCheck className="h-3 w-3" /> Admin
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{user.email}</TableCell>
+                  <TableCell>
+                    {roleName ? (
+                      <Badge variant="secondary">{roleName}</Badge>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      {userPAs.length === 0 ? (
+                        <span className="text-sm text-muted-foreground">—</span>
+                      ) : (
+                        userPAs.map(pa => (
+                          <Badge
+                            key={pa.id}
+                            variant="outline"
+                            className="text-[10px]"
+                            data-testid={`badge-user-pa-${pa.id}`}
+                          >
+                            {pa.name}
+                          </Badge>
+                        ))
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant="outline"
+                      className={
+                        user.isActive === "true"
+                          ? "bg-status-online/10 text-status-online"
+                          : "bg-status-busy/10 text-status-busy"
+                      }
+                    >
+                      {user.isActive === "true" ? "Active" : "Inactive"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" data-testid={`button-user-menu-${user.id}`}>
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => setEditingUser(user)}>
+                          <Edit2 className="h-4 w-4 mr-2" /> Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="text-destructive"
+                          onClick={() => deactivateUserMutation.mutate(user.id)}
+                          disabled={deactivateUserMutation.isPending}
+                        >
+                          <UserX className="h-4 w-4 mr-2" /> Deactivate
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </div>
 
+      {/* Edit user dialog */}
       <Dialog open={!!editingUser} onOpenChange={open => !open && setEditingUser(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit User</DialogTitle>
+            <DialogTitle>Edit Staff Member</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Full Name</Label>
-              <Input value={newUserName} onChange={e => setNewUserName(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label>Email</Label>
-              <Input type="email" value={newUserEmail} onChange={e => setNewUserEmail(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label>System Role</Label>
-              <Select value={newUserRole} onValueChange={setNewUserRole}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="senior_associate">Senior Associate</SelectItem>
-                  <SelectItem value="associate">Associate</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Organization Role</Label>
-              <Select value={newUserCustomRole} onValueChange={setNewUserCustomRole}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {roles.map(r => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Practice Areas (System)</Label>
-              <div className="flex flex-wrap gap-2 p-2 border rounded-md min-h-10">
-                {["corporate_commercial", "intellectual_property", "real_estate", "banking_finance", "dispute_resolution", "tmt"].map(pa => (
-                  <Badge 
-                    key={pa} 
-                    variant={newUserPracticeAreas.includes(pa) ? "default" : "outline"}
-                    className="cursor-pointer"
-                    onClick={() => {
-                      setNewUserPracticeAreas(prev => 
-                        prev.includes(pa) ? prev.filter(p => p !== pa) : [...prev, pa]
-                      );
-                    }}
-                  >
-                    {pa.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Custom Practice Areas</Label>
-              <div className="flex flex-wrap gap-2 p-2 border rounded-md min-h-10">
-                {practiceAreas.map(pa => (
-                  <Badge 
-                    key={pa.id} 
-                    variant={newUserCustomPracticeAreas.includes(pa.id) ? "default" : "outline"}
-                    className="cursor-pointer"
-                    onClick={() => {
-                      setNewUserCustomPracticeAreas(prev => 
-                        prev.includes(pa.id) ? prev.filter(p => p !== pa.id) : [...prev, pa.id]
-                      );
-                    }}
-                  >
-                    {pa.name}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-          </div>
+          <UserForm isEdit />
           <DialogFooter>
-            <Button onClick={handleUpdateUser} disabled={updateUserMutation.isPending}>Save Changes</Button>
+            <Button
+              onClick={handleUpdateUser}
+              disabled={updateUserMutation.isPending || !newUserName || !newUserEmail}
+              data-testid="button-confirm-update-user"
+            >
+              {updateUserMutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
