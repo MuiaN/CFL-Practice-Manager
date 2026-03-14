@@ -20,19 +20,19 @@
 
 const firmConfig = {
   /** Full display name of the law firm */
-  name: "CFL Legal",
+  name: "Mwaura & Company Advocates",
 
   /** Short name / abbreviation shown in tight spaces */
-  shortName: "CFL",
+  shortName: "M&CA",
 
   /** Physical office location shown under the logo */
-  location: "Kilimani, Nairobi",
+  location: "Upperhill, Nairobi",
 
   /** Country / region (used in meta tags) */
   country: "Kenya",
 
   /** Email domain — used in placeholder hints (no @ symbol) */
-  emailDomain: "cfllegal.co.ke",
+  emailDomain: "mwauraandcompany.co.ke",
 
   /** One-line marketing headline shown on the login hero panel */
   tagline: "Excellence in Legal Practice",
