@@ -8,6 +8,9 @@ import {
   FileText, Users, Clock, Briefcase, Edit2, Check, X,
   Download, Eye, Upload, History, Pencil, Trash2, FileImage,
   File, Plus, ChevronRight,
+  Bold as BoldIcon, Italic as ItalicIcon, Underline as UnderlineIcon,
+  AlignLeft, AlignCenter, AlignRight, List, ListOrdered,
+  Undo2, Redo2, Heading1, Heading2, Pilcrow, Strikethrough,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useState, useEffect, useRef } from "react";
@@ -33,6 +36,10 @@ import {
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { getToken } from "@/lib/auth";
+import { useEditor, EditorContent } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import UnderlineTipTap from "@tiptap/extension-underline";
+import TextAlign from "@tiptap/extension-text-align";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -55,16 +62,246 @@ function getFileIconBg(type: string) {
 
 function isPreviewable(type: string) {
   const t = type.toLowerCase();
-  return t === "pdf" || ["jpg", "jpeg", "png", "gif", "webp", "svg"].includes(t);
+  return t === "pdf" || isImage(t) || isWordDoc(t);
 }
 
 function isImage(type: string) {
   return ["jpg", "jpeg", "png", "gif", "webp", "svg"].includes(type.toLowerCase());
 }
 
+function isWordDoc(type: string) {
+  return ["doc", "docx"].includes(type.toLowerCase());
+}
+
 function downloadUrl(docId: string, inline = false) {
   const token = getToken();
   return `/api/documents/${docId}/download?token=${token}${inline ? "&inline=true" : ""}`;
+}
+
+// ─── DOCX In-Browser Editor ──────────────────────────────────────────────────
+
+function ToolbarBtn({
+  onClick, active, title, children, disabled,
+}: {
+  onClick: () => void;
+  active?: boolean;
+  title: string;
+  children: React.ReactNode;
+  disabled?: boolean;
+}) {
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      title={title}
+      onClick={onClick}
+      disabled={disabled}
+      className={`h-7 w-7 ${active ? "toggle-elevate toggle-elevated" : "toggle-elevate"}`}
+    >
+      {children}
+    </Button>
+  );
+}
+
+function DocxEditor({
+  doc,
+  caseId,
+  onNewVersion,
+}: {
+  doc: Document;
+  caseId: string;
+  onNewVersion: () => void;
+}) {
+  const { toast } = useToast();
+  const [isEditing, setIsEditing] = useState(false);
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [changeNote, setChangeNote] = useState("");
+
+  const { data: htmlData, isLoading, isError } = useQuery<{ html: string }>({
+    queryKey: ["/api/documents", doc.id, "html-content"],
+    queryFn: async () => {
+      const token = getToken();
+      const res = await fetch(`/api/documents/${doc.id}/html-content?token=${token}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Failed to load content");
+      return res.json();
+    },
+  });
+
+  const editor = useEditor({
+    extensions: [
+      StarterKit,
+      UnderlineTipTap,
+      TextAlign.configure({ types: ["heading", "paragraph"] }),
+    ],
+    content: "",
+    editable: false,
+  });
+
+  useEffect(() => {
+    if (editor && htmlData?.html) {
+      editor.commands.setContent(htmlData.html);
+    }
+  }, [htmlData?.html, editor]);
+
+  useEffect(() => {
+    editor?.setEditable(isEditing);
+  }, [isEditing, editor]);
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const token = getToken();
+      const html = editor?.getHTML() ?? "";
+      const res = await fetch(`/api/documents/${doc.id}/save-edit`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ html, changeNote }),
+      });
+      if (!res.ok) throw new Error("Save failed");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/cases/${caseId}/documents`] });
+      toast({ title: "New version saved" });
+      setIsEditing(false);
+      setChangeNote("");
+      setShowSaveDialog(false);
+      onNewVersion();
+    },
+    onError: () => toast({ title: "Save failed", variant: "destructive" }),
+  });
+
+  const cancelEdit = () => {
+    setIsEditing(false);
+    if (htmlData?.html) editor?.commands.setContent(htmlData.html);
+  };
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Toolbar */}
+      <div className="flex items-center gap-0.5 px-3 py-1.5 border-b bg-muted/20 flex-wrap shrink-0">
+        <ToolbarBtn title="Bold" onClick={() => editor?.chain().focus().toggleBold().run()} active={editor?.isActive("bold")} disabled={!isEditing}>
+          <BoldIcon className="h-3.5 w-3.5" />
+        </ToolbarBtn>
+        <ToolbarBtn title="Italic" onClick={() => editor?.chain().focus().toggleItalic().run()} active={editor?.isActive("italic")} disabled={!isEditing}>
+          <ItalicIcon className="h-3.5 w-3.5" />
+        </ToolbarBtn>
+        <ToolbarBtn title="Underline" onClick={() => editor?.chain().focus().toggleUnderline().run()} active={editor?.isActive("underline")} disabled={!isEditing}>
+          <UnderlineIcon className="h-3.5 w-3.5" />
+        </ToolbarBtn>
+        <ToolbarBtn title="Strikethrough" onClick={() => editor?.chain().focus().toggleStrike().run()} active={editor?.isActive("strike")} disabled={!isEditing}>
+          <Strikethrough className="h-3.5 w-3.5" />
+        </ToolbarBtn>
+
+        <div className="w-px h-5 bg-border mx-1 shrink-0" />
+
+        <ToolbarBtn title="Heading 1" onClick={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()} active={editor?.isActive("heading", { level: 1 })} disabled={!isEditing}>
+          <Heading1 className="h-3.5 w-3.5" />
+        </ToolbarBtn>
+        <ToolbarBtn title="Heading 2" onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()} active={editor?.isActive("heading", { level: 2 })} disabled={!isEditing}>
+          <Heading2 className="h-3.5 w-3.5" />
+        </ToolbarBtn>
+        <ToolbarBtn title="Paragraph" onClick={() => editor?.chain().focus().setParagraph().run()} active={editor?.isActive("paragraph")} disabled={!isEditing}>
+          <Pilcrow className="h-3.5 w-3.5" />
+        </ToolbarBtn>
+
+        <div className="w-px h-5 bg-border mx-1 shrink-0" />
+
+        <ToolbarBtn title="Align left" onClick={() => editor?.chain().focus().setTextAlign("left").run()} active={editor?.isActive({ textAlign: "left" })} disabled={!isEditing}>
+          <AlignLeft className="h-3.5 w-3.5" />
+        </ToolbarBtn>
+        <ToolbarBtn title="Align center" onClick={() => editor?.chain().focus().setTextAlign("center").run()} active={editor?.isActive({ textAlign: "center" })} disabled={!isEditing}>
+          <AlignCenter className="h-3.5 w-3.5" />
+        </ToolbarBtn>
+        <ToolbarBtn title="Align right" onClick={() => editor?.chain().focus().setTextAlign("right").run()} active={editor?.isActive({ textAlign: "right" })} disabled={!isEditing}>
+          <AlignRight className="h-3.5 w-3.5" />
+        </ToolbarBtn>
+
+        <div className="w-px h-5 bg-border mx-1 shrink-0" />
+
+        <ToolbarBtn title="Bullet list" onClick={() => editor?.chain().focus().toggleBulletList().run()} active={editor?.isActive("bulletList")} disabled={!isEditing}>
+          <List className="h-3.5 w-3.5" />
+        </ToolbarBtn>
+        <ToolbarBtn title="Numbered list" onClick={() => editor?.chain().focus().toggleOrderedList().run()} active={editor?.isActive("orderedList")} disabled={!isEditing}>
+          <ListOrdered className="h-3.5 w-3.5" />
+        </ToolbarBtn>
+
+        <div className="w-px h-5 bg-border mx-1 shrink-0" />
+
+        <ToolbarBtn title="Undo" onClick={() => editor?.chain().focus().undo().run()} disabled={!isEditing || !editor?.can().undo()}>
+          <Undo2 className="h-3.5 w-3.5" />
+        </ToolbarBtn>
+        <ToolbarBtn title="Redo" onClick={() => editor?.chain().focus().redo().run()} disabled={!isEditing || !editor?.can().redo()}>
+          <Redo2 className="h-3.5 w-3.5" />
+        </ToolbarBtn>
+
+        <div className="flex-1" />
+
+        {isEditing ? (
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={cancelEdit}>
+              <X className="h-4 w-4 mr-1.5" /> Cancel
+            </Button>
+            <Button size="sm" onClick={() => setShowSaveDialog(true)}>
+              <Check className="h-4 w-4 mr-1.5" /> Save as New Version
+            </Button>
+          </div>
+        ) : (
+          <Button size="sm" variant="outline" onClick={() => setIsEditing(true)} disabled={isLoading || isError}>
+            <Pencil className="h-4 w-4 mr-1.5" /> Edit
+          </Button>
+        )}
+      </div>
+
+      {/* Document content area */}
+      {isLoading && (
+        <div className="flex-1 flex items-center justify-center">
+          <p className="text-muted-foreground text-sm">Loading document content...</p>
+        </div>
+      )}
+      {isError && (
+        <div className="flex-1 flex items-center justify-center flex-col gap-3">
+          <p className="text-destructive text-sm">Could not render document content.</p>
+          <a href={downloadUrl(doc.id)} download={doc.name}>
+            <Button variant="outline" size="sm"><Download className="h-4 w-4 mr-2" />Download Original</Button>
+          </a>
+        </div>
+      )}
+      {!isLoading && !isError && (
+        <div className="flex-1 overflow-auto p-8">
+          <div className={`prose dark:prose-invert max-w-3xl mx-auto min-h-[60vh] ${isEditing ? "outline outline-2 outline-primary/30 rounded-md p-4" : ""}`}>
+            <EditorContent editor={editor} />
+          </div>
+        </div>
+      )}
+
+      {/* Save as new version dialog */}
+      <Dialog open={showSaveDialog} onOpenChange={setShowSaveDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Save as New Version</DialogTitle>
+          </DialogHeader>
+          <div className="py-2">
+            <Label>Change note (optional)</Label>
+            <Textarea
+              value={changeNote}
+              onChange={e => setChangeNote(e.target.value)}
+              placeholder="Describe what changed in this version..."
+              className="resize-none mt-2"
+              rows={3}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowSaveDialog(false)}>Cancel</Button>
+            <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
+              {saveMutation.isPending ? "Saving..." : "Save Version"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
 }
 
 // ─── Document Viewer Dialog ──────────────────────────────────────────────────
@@ -73,64 +310,76 @@ function DocumentViewerDialog({
   doc,
   open,
   onClose,
+  caseId,
 }: {
   doc: Document | null;
   open: boolean;
   onClose: () => void;
+  caseId: string;
 }) {
   if (!doc) return null;
-  const previewable = isPreviewable(doc.type);
   const img = isImage(doc.type);
+  const word = isWordDoc(doc.type);
+  const isPdf = doc.type.toLowerCase() === "pdf";
 
   return (
     <Dialog open={open} onOpenChange={o => !o && onClose()}>
-      <DialogContent className="max-w-4xl w-full h-[85vh] flex flex-col p-0 gap-0">
-        <DialogHeader className="flex flex-row items-center justify-between px-6 py-4 border-b shrink-0">
+      <DialogContent className={`${word ? "max-w-5xl" : "max-w-4xl"} w-full h-[90vh] flex flex-col p-0 gap-0`}>
+        <DialogHeader className="flex flex-row items-center justify-between px-6 py-3 border-b shrink-0 gap-4">
           <div className="flex items-center gap-3 min-w-0">
-            <span className={`p-2 rounded-md ${getFileIconBg(doc.type)}`}>
+            <span className={`p-2 rounded-md shrink-0 ${getFileIconBg(doc.type)}`}>
               {getFileIcon(doc.type)}
             </span>
             <div className="min-w-0">
               <DialogTitle className="text-base truncate">{doc.name}</DialogTitle>
               <p className="text-xs text-muted-foreground mt-0.5">
                 {doc.size} · Version {doc.version} · {new Date(doc.createdAt).toLocaleDateString()}
+                {word && <span className="ml-2 text-primary font-medium">Word Document</span>}
               </p>
             </div>
           </div>
-          <a
-            href={downloadUrl(doc.id)}
-            download={doc.name}
-            className="shrink-0 ml-4"
-          >
+          <a href={downloadUrl(doc.id)} download={doc.name} className="shrink-0">
             <Button variant="outline" size="sm">
               <Download className="h-4 w-4 mr-2" /> Download
             </Button>
           </a>
         </DialogHeader>
 
-        <div className="flex-1 overflow-hidden bg-muted/30">
-          {previewable ? (
-            img ? (
-              <div className="h-full flex items-center justify-center p-6">
-                <img
-                  src={downloadUrl(doc.id, true)}
-                  alt={doc.name}
-                  className="max-h-full max-w-full object-contain rounded-md"
-                />
-              </div>
-            ) : (
-              <iframe
+        <div className="flex-1 overflow-hidden">
+          {word ? (
+            <DocxEditor key={doc.id} doc={doc} caseId={caseId} onNewVersion={onClose} />
+          ) : img ? (
+            <div className="h-full flex items-center justify-center p-6 bg-muted/20">
+              <img
                 src={downloadUrl(doc.id, true)}
-                title={doc.name}
-                className="w-full h-full border-0"
+                alt={doc.name}
+                className="max-h-full max-w-full object-contain rounded-md"
               />
-            )
+            </div>
+          ) : isPdf ? (
+            <object
+              data={downloadUrl(doc.id, true)}
+              type="application/pdf"
+              className="w-full h-full border-0"
+            >
+              <div className="h-full flex flex-col items-center justify-center gap-4 text-muted-foreground">
+                <span className={`p-6 rounded-full ${getFileIconBg(doc.type)}`}>
+                  {getFileIcon(doc.type)}
+                </span>
+                <p className="text-sm">Your browser cannot display this PDF inline.</p>
+                <a href={downloadUrl(doc.id)} download={doc.name}>
+                  <Button variant="outline">
+                    <Download className="h-4 w-4 mr-2" /> Download PDF
+                  </Button>
+                </a>
+              </div>
+            </object>
           ) : (
             <div className="h-full flex flex-col items-center justify-center gap-4 text-muted-foreground">
               <span className={`p-6 rounded-full ${getFileIconBg(doc.type)}`}>
                 {getFileIcon(doc.type)}
               </span>
-              <p className="text-sm">Preview not available for {doc.type} files.</p>
+              <p className="text-sm">Preview not available for {doc.type.toUpperCase()} files.</p>
               <a href={downloadUrl(doc.id)} download={doc.name}>
                 <Button variant="outline">
                   <Download className="h-4 w-4 mr-2" /> Download to view
@@ -560,7 +809,7 @@ function DocumentsTab({ caseId, currentUser }: { caseId: string; currentUser?: U
         </div>
       )}
 
-      <DocumentViewerDialog doc={viewingDoc} open={!!viewingDoc} onClose={() => setViewingDoc(null)} />
+      <DocumentViewerDialog doc={viewingDoc} open={!!viewingDoc} onClose={() => setViewingDoc(null)} caseId={caseId} />
       <VersionHistoryDialog doc={historyDoc} open={!!historyDoc} onClose={() => setHistoryDoc(null)} onView={setViewingDoc} users={users} />
       <UploadDialog open={uploadOpen} onClose={() => setUploadOpen(false)} caseId={caseId} parentDoc={null} />
       <UploadDialog open={!!newVersionDoc} onClose={() => setNewVersionDoc(null)} caseId={caseId} parentDoc={newVersionDoc} />

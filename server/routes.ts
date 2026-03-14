@@ -8,11 +8,28 @@ import path from "path";
 import fs from "fs";
 import { z } from "zod";
 import { verifyToken } from "./auth";
+import mammoth from "mammoth";
 
 const upload = multer({
   dest: "uploads/",
   limits: { fileSize: 50 * 1024 * 1024 },
 });
+
+const MIME_TYPES: Record<string, string> = {
+  pdf: "application/pdf",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  gif: "image/gif",
+  webp: "image/webp",
+  svg: "image/svg+xml",
+  doc: "application/msword",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xls: "application/vnd.ms-excel",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  txt: "text/plain",
+  csv: "text/csv",
+};
 
 export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/login", async (req, res) => {
@@ -493,6 +510,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const inline = req.query.inline === "true";
       const disposition = inline ? "inline" : "attachment";
+      const contentType = MIME_TYPES[document.type.toLowerCase()] || "application/octet-stream";
+      res.setHeader("Content-Type", contentType);
       res.setHeader("Content-Disposition", `${disposition}; filename="${encodeURIComponent(document.name)}"`);
       res.sendFile(absolutePath);
     } catch (error) {
@@ -584,6 +603,88 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Update document error:", error);
       res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Convert DOCX/DOC to HTML for in-browser viewing and editing
+  app.get("/api/documents/:id/html-content", async (req: any, res) => {
+    try {
+      const token = (req.headers.authorization?.split(" ")[1]) || (req.query.token as string);
+      if (!token) return res.status(401).json({ message: "Unauthorized" });
+      const decoded = verifyToken(token);
+      if (!decoded) return res.status(403).json({ message: "Invalid or expired token" });
+
+      const document = await storage.getDocumentById(req.params.id);
+      if (!document) return res.status(404).json({ message: "Document not found" });
+
+      const t = document.type.toLowerCase();
+      if (!["doc", "docx"].includes(t)) {
+        return res.status(400).json({ message: "Only Word documents can be converted to HTML" });
+      }
+
+      const absolutePath = path.resolve(document.filePath);
+      if (!fs.existsSync(absolutePath)) {
+        return res.status(404).json({ message: "File not found on server" });
+      }
+
+      const result = await mammoth.convertToHtml({ path: absolutePath });
+      res.json({ html: result.value || "<p>Document appears to be empty.</p>" });
+    } catch (error) {
+      console.error("HTML content error:", error);
+      res.status(500).json({ message: "Failed to convert document" });
+    }
+  });
+
+  // Save edited HTML content as a new document version (converts HTML → DOCX)
+  app.post("/api/documents/:id/save-edit", authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      const { html, changeNote } = req.body;
+      if (!html) return res.status(400).json({ message: "HTML content required" });
+
+      const document = await storage.getDocumentById(req.params.id);
+      if (!document) return res.status(404).json({ message: "Document not found" });
+
+      const caseItem = await storage.getCaseById(document.caseId);
+      if (req.userRole !== "admin" && caseItem?.createdById !== req.userId) {
+        const assignedUsers = await storage.getUsersForCase(document.caseId);
+        if (!assignedUsers.some(u => u.id === req.userId)) {
+          return res.status(403).json({ message: "Access denied" });
+        }
+      }
+
+      // @ts-ignore – html-to-docx has no bundled types
+      const HTMLtoDOCX = (await import("html-to-docx")).default;
+      const docxBuffer: Buffer = await HTMLtoDOCX(html, null, {
+        table: { row: { cantSplit: true } },
+        footer: false,
+        pageNumber: false,
+      });
+
+      const fileName = `${Date.now()}-edited`;
+      const filePath = path.join("uploads", fileName);
+      fs.writeFileSync(filePath, docxBuffer);
+
+      const rootId = document.parentDocumentId || document.id;
+      const allVersions = await storage.getDocumentVersions(rootId);
+      const maxVersion = Math.max(...allVersions.map(v => Number(v.version)));
+      const newVersion = (maxVersion + 1).toString();
+
+      const newDoc = await storage.createDocument({
+        name: document.name,
+        type: document.type,
+        size: `${Math.round(docxBuffer.length / 1024)} KB`,
+        filePath,
+        caseId: document.caseId,
+        uploadedById: req.userId!,
+        version: newVersion,
+        parentDocumentId: rootId,
+        changeNote: changeNote || "Edited in browser",
+      });
+
+      res.status(201).json(newDoc);
+    } catch (error) {
+      console.error("Save edit error:", error);
+      res.status(500).json({ message: "Failed to save document" });
     }
   });
 
