@@ -5,11 +5,13 @@ import { generateToken, verifyPassword, authenticateToken, requireAdmin, type Au
 import { insertUserSchema, insertCaseSchema, insertDocumentSchema, insertCaseAssignmentSchema, insertRoleSchema, insertPracticeAreaSchema } from "@shared/schema";
 import multer from "multer";
 import path from "path";
+import fs from "fs";
 import { z } from "zod";
+import { verifyToken } from "./auth";
 
 const upload = multer({
   dest: "uploads/",
-  limits: { fileSize: 10 * 1024 * 1024 },
+  limits: { fileSize: 50 * 1024 * 1024 },
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -454,14 +456,133 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const deleted = await storage.deleteDocument(id);
-      
-      if (!deleted) {
-        return res.status(404).json({ message: "Document not found" });
-      }
-
+      if (!deleted) return res.status(404).json({ message: "Document not found" });
       res.status(204).send();
     } catch (error) {
       console.error("Delete document error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Serve file for inline viewing or download (token accepted via query param for iframe use)
+  app.get("/api/documents/:id/download", async (req: any, res) => {
+    try {
+      const token = (req.headers.authorization?.split(" ")[1]) || (req.query.token as string);
+      if (!token) return res.status(401).json({ message: "Unauthorized" });
+
+      const decoded = verifyToken(token);
+      if (!decoded) return res.status(403).json({ message: "Invalid or expired token" });
+
+      const document = await storage.getDocumentById(req.params.id);
+      if (!document) return res.status(404).json({ message: "Document not found" });
+
+      const caseItem = await storage.getCaseById(document.caseId);
+      if (!caseItem) return res.status(404).json({ message: "Case not found" });
+
+      if (decoded.role !== "admin" && caseItem.createdById !== decoded.userId) {
+        const assignedUsers = await storage.getUsersForCase(document.caseId);
+        if (!assignedUsers.some(u => u.id === decoded.userId)) {
+          return res.status(403).json({ message: "Access denied" });
+        }
+      }
+
+      const absolutePath = path.resolve(document.filePath);
+      if (!fs.existsSync(absolutePath)) {
+        return res.status(404).json({ message: "File not found on server" });
+      }
+
+      const inline = req.query.inline === "true";
+      const disposition = inline ? "inline" : "attachment";
+      res.setHeader("Content-Disposition", `${disposition}; filename="${encodeURIComponent(document.name)}"`);
+      res.sendFile(absolutePath);
+    } catch (error) {
+      console.error("Download document error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Get all versions of a document
+  app.get("/api/documents/:id/versions", authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      const document = await storage.getDocumentById(req.params.id);
+      if (!document) return res.status(404).json({ message: "Document not found" });
+
+      const rootId = document.parentDocumentId || document.id;
+      const versions = await storage.getDocumentVersions(rootId);
+
+      // Auth check via case access
+      const caseItem = await storage.getCaseById(document.caseId);
+      if (req.userRole !== "admin" && caseItem?.createdById !== req.userId) {
+        const assignedUsers = await storage.getUsersForCase(document.caseId);
+        if (!assignedUsers.some(u => u.id === req.userId)) {
+          return res.status(403).json({ message: "Access denied" });
+        }
+      }
+
+      res.json(versions);
+    } catch (error) {
+      console.error("Get versions error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Upload a new version of an existing document
+  app.post("/api/documents/:id/new-version", authenticateToken, upload.single("file"), async (req: AuthRequest, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ message: "File required" });
+
+      const rootDoc = await storage.getDocumentById(req.params.id);
+      if (!rootDoc) return res.status(404).json({ message: "Document not found" });
+
+      // Find the highest current version
+      const rootId = rootDoc.parentDocumentId || rootDoc.id;
+      const allVersions = await storage.getDocumentVersions(rootId);
+      const maxVersion = Math.max(...allVersions.map(v => Number(v.version)));
+      const newVersion = (maxVersion + 1).toString();
+
+      const docData = {
+        name: rootDoc.name, // Keep original name by default
+        type: path.extname(req.file.originalname).substring(1).toUpperCase() || rootDoc.type,
+        size: `${Math.round(req.file.size / 1024)} KB`,
+        caseId: rootDoc.caseId,
+        uploadedById: req.userId!,
+        filePath: req.file.path,
+        version: newVersion,
+        parentDocumentId: rootId,
+        changeNote: req.body.changeNote || null,
+      };
+
+      const newDoc = await storage.createDocument(docData);
+      res.status(201).json(newDoc);
+    } catch (error) {
+      console.error("New version error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Rename a document or update its change note
+  app.patch("/api/documents/:id", authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      const document = await storage.getDocumentById(req.params.id);
+      if (!document) return res.status(404).json({ message: "Document not found" });
+
+      const caseItem = await storage.getCaseById(document.caseId);
+      if (req.userRole !== "admin" && caseItem?.createdById !== req.userId) {
+        const assignedUsers = await storage.getUsersForCase(document.caseId);
+        if (!assignedUsers.some(u => u.id === req.userId)) {
+          return res.status(403).json({ message: "Access denied" });
+        }
+      }
+
+      const { name, changeNote } = req.body;
+      const updated = await storage.updateDocument(req.params.id, {
+        ...(name && { name }),
+        ...(changeNote !== undefined && { changeNote }),
+      });
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Update document error:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   });

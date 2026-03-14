@@ -44,6 +44,8 @@ export interface IStorage {
   createDocument(document: InsertDocument): Promise<Document>;
   getDocumentById(id: string): Promise<Document | undefined>;
   getDocumentsByCase(caseId: string): Promise<Document[]>;
+  getDocumentVersions(rootDocumentId: string): Promise<Document[]>;
+  updateDocument(id: string, updates: Partial<InsertDocument>): Promise<Document | undefined>;
   getAllDocuments(): Promise<Document[]>;
   deleteDocument(id: string): Promise<boolean>;
 
@@ -194,6 +196,25 @@ export class DbStorage implements IStorage {
       .from(documents)
       .where(eq(documents.caseId, caseId))
       .orderBy(desc(documents.createdAt));
+  }
+
+  async getDocumentVersions(rootDocumentId: string): Promise<Document[]> {
+    const root = await db.select().from(documents).where(eq(documents.id, rootDocumentId));
+    const versions = await db
+      .select()
+      .from(documents)
+      .where(eq(documents.parentDocumentId, rootDocumentId))
+      .orderBy(desc(documents.createdAt));
+    return [...root, ...versions].sort((a, b) => Number(a.version) - Number(b.version));
+  }
+
+  async updateDocument(id: string, updates: Partial<InsertDocument>): Promise<Document | undefined> {
+    const [doc] = await db
+      .update(documents)
+      .set(updates)
+      .where(eq(documents.id, id))
+      .returning();
+    return doc;
   }
 
   async getAllDocuments(): Promise<Document[]> {
