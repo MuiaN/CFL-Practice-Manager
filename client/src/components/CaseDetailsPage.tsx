@@ -40,6 +40,11 @@ import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import UnderlineTipTap from "@tiptap/extension-underline";
 import TextAlign from "@tiptap/extension-text-align";
+import { Document as PdfDocument, Page as PdfPage, pdfjs } from "react-pdf";
+import "react-pdf/dist/Page/AnnotationLayer.css";
+import "react-pdf/dist/Page/TextLayer.css";
+
+pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -304,6 +309,93 @@ function DocxEditor({
   );
 }
 
+// ─── PDF Viewer ───────────────────────────────────────────────────────────────
+
+function PdfViewer({ docId }: { docId: string }) {
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [numPages, setNumPages] = useState<number>(0);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [containerWidth, setContainerWidth] = useState<number>(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let objectUrl: string | null = null;
+    const token = getToken();
+    fetch(`/api/documents/${docId}/download?token=${token}&inline=true`)
+      .then(res => {
+        if (!res.ok) throw new Error(`Failed to load PDF (${res.status})`);
+        return res.blob();
+      })
+      .then(blob => {
+        objectUrl = URL.createObjectURL(blob);
+        setPdfUrl(objectUrl);
+      })
+      .catch(err => setLoadError(err.message));
+
+    return () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [docId]);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const obs = new ResizeObserver(entries => {
+      setContainerWidth(entries[0].contentRect.width);
+    });
+    obs.observe(containerRef.current);
+    setContainerWidth(containerRef.current.clientWidth);
+    return () => obs.disconnect();
+  }, []);
+
+  if (loadError) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center gap-3 text-muted-foreground">
+        <FileText className="h-12 w-12 opacity-40" />
+        <p className="text-sm font-medium">Could not load PDF</p>
+        <p className="text-xs">{loadError}</p>
+      </div>
+    );
+  }
+
+  if (!pdfUrl) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3 text-muted-foreground">
+          <div className="h-8 w-8 border-2 border-current border-t-transparent rounded-full animate-spin opacity-60" />
+          <p className="text-sm">Loading PDF…</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div ref={containerRef} className="h-full overflow-y-auto bg-muted/30 flex flex-col items-center py-4 gap-4">
+      <PdfDocument
+        file={pdfUrl}
+        onLoadSuccess={({ numPages }) => setNumPages(numPages)}
+        onLoadError={err => setLoadError(err.message)}
+        loading={
+          <div className="flex items-center gap-3 text-muted-foreground mt-8">
+            <div className="h-6 w-6 border-2 border-current border-t-transparent rounded-full animate-spin opacity-60" />
+            <p className="text-sm">Rendering PDF…</p>
+          </div>
+        }
+      >
+        {Array.from({ length: numPages }, (_, i) => (
+          <div key={i + 1} className="shadow-md rounded-sm overflow-hidden mb-1">
+            <PdfPage
+              pageNumber={i + 1}
+              width={containerWidth ? Math.min(containerWidth - 32, 900) : undefined}
+              renderAnnotationLayer
+              renderTextLayer
+            />
+          </div>
+        ))}
+      </PdfDocument>
+    </div>
+  );
+}
+
 // ─── Document Viewer Dialog ──────────────────────────────────────────────────
 
 function DocumentViewerDialog({
@@ -357,23 +449,7 @@ function DocumentViewerDialog({
               />
             </div>
           ) : isPdf ? (
-            <object
-              data={downloadUrl(doc.id, true)}
-              type="application/pdf"
-              className="w-full h-full border-0"
-            >
-              <div className="h-full flex flex-col items-center justify-center gap-4 text-muted-foreground">
-                <span className={`p-6 rounded-full ${getFileIconBg(doc.type)}`}>
-                  {getFileIcon(doc.type)}
-                </span>
-                <p className="text-sm">Your browser cannot display this PDF inline.</p>
-                <a href={downloadUrl(doc.id)} download={doc.name}>
-                  <Button variant="outline">
-                    <Download className="h-4 w-4 mr-2" /> Download PDF
-                  </Button>
-                </a>
-              </div>
-            </object>
+            <PdfViewer key={doc.id} docId={doc.id} />
           ) : (
             <div className="h-full flex flex-col items-center justify-center gap-4 text-muted-foreground">
               <span className={`p-6 rounded-full ${getFileIconBg(doc.type)}`}>
