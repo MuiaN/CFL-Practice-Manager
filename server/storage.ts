@@ -19,7 +19,7 @@ import {
   practiceAreas,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc, ilike, or } from "drizzle-orm";
+import { eq, and, desc, ilike, or, sql } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 
 export interface IStorage {
@@ -45,6 +45,7 @@ export interface IStorage {
   getDocumentById(id: string): Promise<Document | undefined>;
   getDocumentsByCase(caseId: string): Promise<Document[]>;
   getDocumentVersions(rootDocumentId: string): Promise<Document[]>;
+  findRootDocumentByName(caseId: string, name: string): Promise<Document | undefined>;
   updateDocument(id: string, updates: Partial<InsertDocument>): Promise<Document | undefined>;
   getAllDocuments(): Promise<Document[]>;
   deleteDocument(id: string): Promise<boolean>;
@@ -208,6 +209,25 @@ export class DbStorage implements IStorage {
     return [...root, ...versions].sort((a, b) => Number(a.version) - Number(b.version));
   }
 
+  async findRootDocumentByName(caseId: string, name: string): Promise<Document | undefined> {
+    const [doc] = await db
+      .select()
+      .from(documents)
+      .where(
+        and(
+          eq(documents.caseId, caseId),
+          eq(documents.name, name),
+          or(
+            eq(documents.parentDocumentId, ""),
+            sql`${documents.parentDocumentId} IS NULL`
+          )
+        )
+      )
+      .orderBy(desc(documents.createdAt))
+      .limit(1);
+    return doc;
+  }
+
   async updateDocument(id: string, updates: Partial<InsertDocument>): Promise<Document | undefined> {
     const [doc] = await db
       .update(documents)
@@ -257,6 +277,9 @@ export class DbStorage implements IStorage {
   }
 
   async deleteDocument(id: string): Promise<boolean> {
+    // Delete all child versions that reference this doc as their parent
+    await db.delete(documents).where(eq(documents.parentDocumentId, id));
+    // Also handle case where we're deleting a version (not root): delete its children too
     const result = await db.delete(documents).where(eq(documents.id, id));
     return result.rowCount ? result.rowCount > 0 : false;
   }

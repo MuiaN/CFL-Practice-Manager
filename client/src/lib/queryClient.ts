@@ -47,7 +47,10 @@ export async function apiRequest<T = any>(
   });
 
   await throwIfResNotOk(res);
-  return await res.json();
+  if (res.status === 204 || res.headers.get("content-length") === "0") return null as T;
+  const text = await res.text();
+  if (!text) return null as T;
+  return JSON.parse(text) as T;
 }
 
 type UnauthorizedBehavior = "returnNull" | "throw";

@@ -395,10 +395,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Case ID required" });
       }
 
+      const originalName = req.file.originalname;
+      const fileType = path.extname(originalName).substring(1).toUpperCase();
+      const fileSize = `${Math.round(req.file.size / 1024)} KB`;
+
+      // Check if a root document with the same name already exists in this case.
+      // If so, upload as a new version instead of creating a duplicate root.
+      const existingRoot = await storage.findRootDocumentByName(caseId, originalName);
+
+      if (existingRoot) {
+        const allVersions = await storage.getDocumentVersions(existingRoot.id);
+        const maxVersion = Math.max(...allVersions.map(v => Number(v.version)));
+        const newVersion = (maxVersion + 1).toString();
+
+        const versionData = {
+          name: existingRoot.name,
+          type: fileType || existingRoot.type,
+          size: fileSize,
+          caseId,
+          uploadedById: req.userId!,
+          filePath: req.file.path,
+          version: newVersion,
+          parentDocumentId: existingRoot.id,
+          changeNote: `Uploaded version ${newVersion}`,
+        };
+
+        const newDoc = await storage.createDocument(versionData);
+        return res.status(201).json(newDoc);
+      }
+
+      // No existing root — create a brand-new document at version 1
       const documentData = {
-        name: req.file.originalname,
-        type: path.extname(req.file.originalname).substring(1).toUpperCase(),
-        size: `${Math.round(req.file.size / 1024)} KB`,
+        name: originalName,
+        type: fileType,
+        size: fileSize,
         caseId,
         uploadedById: req.userId!,
         filePath: req.file.path,
