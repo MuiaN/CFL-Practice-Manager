@@ -77,6 +77,15 @@ export const documents = pgTable("documents", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+export const activityLogs = pgTable("activity_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  caseId: varchar("case_id").notNull().references(() => cases.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "set null" }),
+  action: text("action").notNull(),
+  details: text("details").notNull().default("{}"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 export const insertRoleSchema = createInsertSchema(roles).omit({
   id: true,
   createdAt: true,
@@ -125,3 +134,5 @@ export type InsertDocument = z.infer<typeof insertDocumentSchema>;
 
 export type CaseAssignment = typeof caseAssignments.$inferSelect;
 export type InsertCaseAssignment = z.infer<typeof insertCaseAssignmentSchema>;
+
+export type ActivityLog = typeof activityLogs.$inferSelect;

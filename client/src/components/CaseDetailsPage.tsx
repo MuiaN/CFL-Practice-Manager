@@ -1,16 +1,17 @@
 import { useParams, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { type Case, type Document, type User, type PracticeArea } from "@shared/schema";
+import { type Case, type Document, type User, type PracticeArea, type ActivityLog } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   FileText, Users, Clock, Briefcase, Edit2, Check, X,
   Download, Eye, Upload, History, Pencil, Trash2, FileImage,
-  File, Plus, ChevronRight,
+  File, Plus, ChevronRight, Activity,
   Bold as BoldIcon, Italic as ItalicIcon, Underline as UnderlineIcon,
   AlignLeft, AlignCenter, AlignRight, List, ListOrdered,
   Undo2, Redo2, Heading1, Heading2, Pilcrow, Strikethrough,
+  UserPlus, FileUp, FileMinus, GitBranch,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useState, useEffect, useRef } from "react";
@@ -477,14 +478,20 @@ function VersionHistoryDialog({
   onClose,
   onView,
   users,
+  caseId,
+  isAdmin,
 }: {
   doc: Document | null;
   open: boolean;
   onClose: () => void;
   onView: (d: Document) => void;
   users: User[];
+  caseId: string;
+  isAdmin: boolean;
 }) {
+  const { toast } = useToast();
   const rootId = doc ? (doc.parentDocumentId || doc.id) : null;
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const { data: versions = [], isLoading } = useQuery<Document[]>({
     queryKey: ["/api/documents", rootId, "versions"],
@@ -499,10 +506,25 @@ function VersionHistoryDialog({
     },
   });
 
+  const deleteVersionMutation = useMutation({
+    mutationFn: async (versionId: string) => apiRequest("DELETE", `/api/documents/${versionId}/version`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/documents", rootId, "versions"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/cases/${caseId}/documents`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/cases/${caseId}/activity`] });
+      setConfirmDeleteId(null);
+      toast({ title: "Version deleted and versions renumbered" });
+    },
+    onError: () => toast({ title: "Failed to delete version", variant: "destructive" }),
+  });
+
   if (!doc) return null;
 
+  // Show in descending order (latest first)
+  const sorted = [...versions].sort((a, b) => Number(b.version) - Number(a.version));
+
   return (
-    <Dialog open={open} onOpenChange={o => !o && onClose()}>
+    <Dialog open={open} onOpenChange={o => { if (!o) { setConfirmDeleteId(null); onClose(); } }}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -512,41 +534,91 @@ function VersionHistoryDialog({
           <p className="text-sm text-muted-foreground">{doc.name}</p>
         </DialogHeader>
 
-        <div className="space-y-1 max-h-96 overflow-y-auto py-2">
+        <div className="space-y-1 max-h-[420px] overflow-y-auto py-2">
           {isLoading && (
             <p className="text-sm text-muted-foreground text-center py-6">Loading versions...</p>
           )}
           {!isLoading && versions.length === 0 && (
             <p className="text-sm text-muted-foreground text-center py-6">No versions found.</p>
           )}
-          {[...versions].reverse().map((v, idx) => {
+          {sorted.map((v, idx) => {
             const uploader = users.find(u => u.id === v.uploadedById);
             const isLatest = idx === 0;
+            const isConfirming = confirmDeleteId === v.id;
+
             return (
-              <div
-                key={v.id}
-                className="flex items-start gap-3 p-3 rounded-md hover-elevate cursor-pointer"
-                onClick={() => { onView(v); onClose(); }}
-              >
-                <div className="flex flex-col items-center gap-1 pt-0.5 shrink-0">
-                  <div className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold ${isLatest ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
-                    v{v.version}
+              <div key={v.id} className="rounded-md border">
+                <div
+                  className="flex items-start gap-3 p-3 cursor-pointer hover-elevate"
+                  onClick={() => { if (!isConfirming) { onView(v); onClose(); } }}
+                >
+                  <div className="flex flex-col items-center gap-1 pt-0.5 shrink-0">
+                    <div className={`h-7 w-7 rounded-full flex items-center justify-center text-[10px] font-bold ${isLatest ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+                      v{v.version}
+                    </div>
                   </div>
-                  {idx < versions.length - 1 && <div className="w-px flex-1 bg-border min-h-4" />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-medium">Version {v.version}</span>
-                    {isLatest && <Badge variant="default" className="text-[10px]">Latest</Badge>}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-medium">Version {v.version}</span>
+                      {isLatest && <Badge variant="default" className="text-[10px]">Latest</Badge>}
+                    </div>
+                    {v.changeNote && (
+                      <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{v.changeNote}</p>
+                    )}
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      {uploader?.name ?? "Unknown"} · {new Date(v.createdAt).toLocaleString()}
+                    </p>
                   </div>
-                  {v.changeNote && (
-                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{v.changeNote}</p>
-                  )}
-                  <p className="text-[11px] text-muted-foreground mt-1">
-                    {uploader?.name ?? "Unknown"} · {new Date(v.createdAt).toLocaleString()}
-                  </p>
+                  <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={() => { onView(v); onClose(); }}
+                      title="View this version"
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                    </Button>
+                    {isAdmin && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-destructive"
+                        onClick={() => setConfirmDeleteId(isConfirming ? null : v.id)}
+                        title="Delete this version"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
-                <Eye className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+
+                {isConfirming && (
+                  <div className="px-3 pb-3 pt-1 border-t bg-destructive/5 rounded-b-md">
+                    <p className="text-xs text-destructive font-medium mb-2">
+                      Delete version {v.version}? Remaining versions will be renumbered.
+                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        className="h-7 text-xs"
+                        disabled={deleteVersionMutation.isPending}
+                        onClick={() => deleteVersionMutation.mutate(v.id)}
+                      >
+                        {deleteVersionMutation.isPending ? "Deleting…" : "Confirm Delete"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-xs"
+                        onClick={() => setConfirmDeleteId(null)}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}

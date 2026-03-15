@@ -340,6 +340,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const assignment = await storage.assignUserToCase({ caseId: id, userId });
+
+      // Log assignment activity
+      const assignedUser = await storage.getUser(userId);
+      await storage.createActivityLog({
+        caseId: id,
+        userId: req.userId,
+        action: "assigned",
+        details: { assignedUserId: userId, assignedUserName: assignedUser?.name ?? userId },
+      }).catch(() => {});
+
       res.status(201).json(assignment);
     } catch (error) {
       console.error("Assign user to case error:", error);
@@ -421,6 +431,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
 
         const newDoc = await storage.createDocument(versionData);
+
+        await storage.createActivityLog({
+          caseId,
+          userId: req.userId,
+          action: "version_uploaded",
+          details: { documentName: existingRoot.name, documentId: existingRoot.id, version: newVersion, type: fileType },
+        }).catch(() => {});
+
         return res.status(201).json(newDoc);
       }
 
@@ -436,6 +454,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
 
       const document = await storage.createDocument(documentData);
+
+      await storage.createActivityLog({
+        caseId,
+        userId: req.userId,
+        action: "document_uploaded",
+        details: { documentName: originalName, documentId: document.id, version: "1", type: fileType },
+      }).catch(() => {});
+
       res.status(201).json(document);
     } catch (error) {
       console.error("Upload document error:", error);
@@ -502,11 +528,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/documents/:id", authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
+      const doc = await storage.getDocumentById(id);
+      if (!doc) return res.status(404).json({ message: "Document not found" });
+
+      // Fetch all versions before deletion for the log
+      const allVersions = await storage.getDocumentVersions(doc.parentDocumentId || doc.id);
       const deleted = await storage.deleteDocument(id);
       if (!deleted) return res.status(404).json({ message: "Document not found" });
+
+      await storage.createActivityLog({
+        caseId: doc.caseId,
+        userId: req.userId,
+        action: "document_deleted",
+        details: { documentName: doc.name, versionsDeleted: allVersions.length },
+      }).catch(() => {});
+
       res.status(204).send();
     } catch (error) {
       console.error("Delete document error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Delete a specific version and renumber remaining versions
+  app.delete("/api/documents/:id/version", authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const doc = await storage.getDocumentById(id);
+      if (!doc) return res.status(404).json({ message: "Document not found" });
+
+      const deletedVersion = doc.version;
+      const rootId = doc.parentDocumentId || doc.id;
+      const rootDoc = await storage.getDocumentById(rootId);
+
+      const result = await storage.deleteDocumentVersion(id);
+      if (!result.deleted) return res.status(404).json({ message: "Version not found" });
+
+      await storage.createActivityLog({
+        caseId: doc.caseId,
+        userId: req.userId,
+        action: "version_deleted",
+        details: { documentName: rootDoc?.name ?? doc.name, deletedVersion },
+      }).catch(() => {});
+
+      res.status(204).send();
+    } catch (error) {
+      console.error("Delete version error:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   });
@@ -602,9 +669,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
 
       const newDoc = await storage.createDocument(docData);
+
+      await storage.createActivityLog({
+        caseId: rootDoc.caseId,
+        userId: req.userId,
+        action: "version_uploaded",
+        details: { documentName: rootDoc.name, documentId: rootId, version: newVersion, changeNote: req.body.changeNote || null },
+      }).catch(() => {});
+
       res.status(201).json(newDoc);
     } catch (error) {
       console.error("New version error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Get activity logs for a case
+  app.get("/api/cases/:id/activity", authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const caseItem = await storage.getCaseById(id);
+      if (!caseItem) return res.status(404).json({ message: "Case not found" });
+      const logs = await storage.getActivityLogsByCase(id);
+      res.json(logs);
+    } catch (error) {
+      console.error("Get activity error:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   });

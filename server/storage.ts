@@ -11,12 +11,14 @@ import {
   type InsertRole,
   type PracticeArea,
   type InsertPracticeArea,
+  type ActivityLog,
   users,
   cases,
   documents,
   caseAssignments,
   roles,
   practiceAreas,
+  activityLogs,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, ilike, or, sql } from "drizzle-orm";
@@ -49,6 +51,10 @@ export interface IStorage {
   updateDocument(id: string, updates: Partial<InsertDocument>): Promise<Document | undefined>;
   getAllDocuments(): Promise<Document[]>;
   deleteDocument(id: string): Promise<boolean>;
+  deleteDocumentVersion(versionId: string): Promise<{ deleted: boolean }>;
+
+  createActivityLog(log: { caseId: string; userId?: string | null; action: string; details: object }): Promise<ActivityLog>;
+  getActivityLogsByCase(caseId: string): Promise<ActivityLog[]>;
 
   createRole(role: InsertRole): Promise<Role>;
   getRoles(): Promise<Role[]>;
@@ -282,6 +288,75 @@ export class DbStorage implements IStorage {
     // Also handle case where we're deleting a version (not root): delete its children too
     const result = await db.delete(documents).where(eq(documents.id, id));
     return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  async deleteDocumentVersion(versionId: string): Promise<{ deleted: boolean }> {
+    // Load the version to delete
+    const [versionDoc] = await db.select().from(documents).where(eq(documents.id, versionId)).limit(1);
+    if (!versionDoc) return { deleted: false };
+
+    const rootId = versionDoc.parentDocumentId || versionDoc.id;
+    const isRoot = !versionDoc.parentDocumentId;
+
+    // Load all versions sorted ascending
+    const allVersions = (await this.getDocumentVersions(rootId))
+      .sort((a, b) => Number(a.version) - Number(b.version));
+
+    if (allVersions.length === 1) {
+      // Only version — delete everything
+      await db.delete(documents).where(eq(documents.id, versionId));
+      return { deleted: true };
+    }
+
+    // Delete the target version
+    await db.delete(documents).where(eq(documents.id, versionId));
+
+    // Remaining versions in order
+    const remaining = allVersions
+      .filter(v => v.id !== versionId)
+      .sort((a, b) => Number(a.version) - Number(b.version));
+
+    if (isRoot) {
+      // Promote the new first doc to root (clear parentDocumentId)
+      const newRoot = remaining[0];
+      await db.update(documents)
+        .set({ parentDocumentId: null, version: "1" })
+        .where(eq(documents.id, newRoot.id));
+
+      // Update the rest to point to the new root and renumber
+      for (let i = 1; i < remaining.length; i++) {
+        await db.update(documents)
+          .set({ parentDocumentId: newRoot.id, version: (i + 1).toString() })
+          .where(eq(documents.id, remaining[i].id));
+      }
+    } else {
+      // Root stays — just renumber all remaining sequentially
+      for (let i = 0; i < remaining.length; i++) {
+        await db.update(documents)
+          .set({ version: (i + 1).toString() })
+          .where(eq(documents.id, remaining[i].id));
+      }
+    }
+
+    return { deleted: true };
+  }
+
+  async createActivityLog(log: { caseId: string; userId?: string | null; action: string; details: object }): Promise<ActivityLog> {
+    const [entry] = await db.insert(activityLogs).values({
+      caseId: log.caseId,
+      userId: log.userId ?? null,
+      action: log.action,
+      details: JSON.stringify(log.details),
+    }).returning();
+    return entry;
+  }
+
+  async getActivityLogsByCase(caseId: string): Promise<ActivityLog[]> {
+    return await db
+      .select()
+      .from(activityLogs)
+      .where(eq(activityLogs.caseId, caseId))
+      .orderBy(desc(activityLogs.createdAt));
   }
 
   async createRole(role: InsertRole): Promise<Role> {
